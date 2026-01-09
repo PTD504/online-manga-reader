@@ -1,0 +1,18 @@
+# FastAPI and server
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# OCR Engine
+paddleocr>=2.7.0
+paddlepaddle>=2.5.0
+
+# Translation (Gemini API - new SDK)
+google-genai>=1.0.0
+
+# Environment management
+python-dotenv>=1.0.0
+
+# Image processing
+opencv-python-headless>=4.9.0
+numpy>=1.24.0

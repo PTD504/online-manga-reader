@@ -1,0 +1,40 @@
+# --- Python (FastAPI & OCR) ---
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+
+# --- PaddleOCR & AI Models ---
+# Tránh đẩy các file model nặng lên Git
+inference/
+*.onnx
+*.pth
+*.pdmodel
+*.pdiparams
+*.pdparams
+
+# --- Frontend (Vite & Chrome Extension) ---
+node_modules/
+.DS_Store
+dist/
+dist-zip/
+*.local
+.eslintcache
+
+# --- Logs & OS ---
+*.log
+logs/
+.vscode/
+.idea/
+Thumbs.db
+
+models/
+test/
