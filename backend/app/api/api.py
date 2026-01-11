@@ -2,20 +2,45 @@
 API Router for Manga Translation endpoints.
 
 This module defines the REST API endpoints for the manga translation service.
+Uses sequential processing with model failover for optimal Time-to-First-Token.
 """
 
 import logging
+from enum import Enum
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile, Query
 from pydantic import BaseModel
 
-from app.services.ocr_engine import extract_text
-from app.services.translator import translate_text
+from app.services.translator import translate_image
 
 logger = logging.getLogger(__name__)
 
-# Create API router - THIS MUST BE EXPORTED
+# Create API router
 router = APIRouter(tags=["Translation"])
+
+
+class TargetLanguage(str, Enum):
+    """Supported target languages for translation."""
+    VIETNAMESE = "Vietnamese"
+    ENGLISH = "English"
+    JAPANESE = "Japanese"
+    KOREAN = "Korean"
+    CHINESE_SIMPLIFIED = "Chinese (Simplified)"
+    CHINESE_TRADITIONAL = "Chinese (Traditional)"
+    SPANISH = "Spanish"
+    FRENCH = "French"
+    PORTUGUESE = "Portuguese"
+    INDONESIAN = "Indonesian"
+    THAI = "Thai"
+    RUSSIAN = "Russian"
+    GERMAN = "German"
+    ITALIAN = "Italian"
+    ARABIC = "Arabic"
+    HINDI = "Hindi"
+    FILIPINO = "Filipino"
+    POLISH = "Polish"
+    TURKISH = "Turkish"
+    UKRAINIAN = "Ukrainian"
 
 
 class TranslationResponse(BaseModel):
@@ -25,14 +50,23 @@ class TranslationResponse(BaseModel):
 
 
 @router.post("/translate-bubble", response_model=TranslationResponse)
-async def translate_bubble(file: UploadFile = File(...)) -> TranslationResponse:
+async def translate_bubble(
+    file: UploadFile = File(...),
+    target_lang: TargetLanguage = Query(
+        default=TargetLanguage.VIETNAMESE,
+        description="Target language for translation"
+    )
+) -> TranslationResponse:
     """
     Translate text from a manga speech bubble image.
     
-    Process: Image -> PaddleOCR -> Text -> Gemini API -> Translated Text
+    Process: Image -> Gemini Vision (OCR + Translation) -> JSON Result
+    
+    Uses model failover: gemini-2.5-flash-lite -> gemini-2.0-flash on rate limits.
     
     Args:
-        file: Image file of the manga speech bubble (PNG, JPG, etc.)
+        file: Image file (PNG, JPG, WEBP, etc.)
+        target_lang: Target language for translation (dropdown selection)
         
     Returns:
         TranslationResponse with original and translated text.
@@ -55,29 +89,21 @@ async def translate_bubble(file: UploadFile = File(...)) -> TranslationResponse:
                 detail="Empty file received."
             )
         
-        # Step 1: Extract text using OCR
-        logger.info("Step 1: OCR extraction...")
-        original_text = extract_text(image_bytes)
+        # Translate using Gemini Vision with failover
+        # Pass the enum value (string) to the translator
+        result = await translate_image(image_bytes, target_lang.value)
         
-        if not original_text:
-            logger.warning("No text detected in image")
-            return TranslationResponse(original="", translated="")
-        
-        # Step 2: Translate the extracted text
-        logger.info("Step 2: Translation...")
-        translated_text = await translate_text(original_text)
-        
-        logger.info("Translation pipeline complete")
+        logger.info(f"Translation complete -> {target_lang.value}")
         return TranslationResponse(
-            original=original_text,
-            translated=translated_text
+            original=result.get("original", ""),
+            translated=result.get("translated", "")
         )
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in translation pipeline: {e}")
+        logger.error(f"Error in translation: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Translation processing failed: {str(e)}"
+            detail=f"Translation failed: {str(e)}"
         )
