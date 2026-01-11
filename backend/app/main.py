@@ -2,6 +2,7 @@
 FastAPI Main Application Entry Point.
 
 This module initializes the FastAPI application and configures all routes and services.
+Includes Gemini Vision translation and YOLOv11 bubble detection.
 """
 
 import logging
@@ -11,8 +12,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.api import router as api_router
-from app.services.ocr_engine import get_ocr_engine
+from app.api.api import router as translation_router
+from app.api.detection import router as detection_router
+from app.services.translator import get_translator
+from app.services.detector import get_detector
 
 # Load environment variables from .env file
 load_dotenv()
@@ -29,17 +32,26 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-    Pre-loads the OCR engine on startup to avoid cold start delays.
+    Pre-loads Gemini client and YOLO model on startup.
     """
     logger.info("Starting Manga Translator Backend...")
-    logger.info("Pre-loading OCR engine...")
     
+    # Initialize Gemini client
     try:
-        get_ocr_engine()
-        logger.info("OCR engine loaded successfully")
+        get_translator()
+        logger.info("Gemini API client initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize OCR engine: {e}")
+        logger.error(f"Failed to initialize Gemini API client: {e}")
         raise
+    
+    # Initialize YOLO detector (pre-load model)
+    try:
+        get_detector()
+        logger.info("YOLO bubble detector loaded successfully")
+    except FileNotFoundError as e:
+        logger.warning(f"YOLO model not found (detection disabled): {e}")
+    except Exception as e:
+        logger.warning(f"Failed to load YOLO detector: {e}")
     
     logger.info("Manga Translator Backend is ready!")
     
@@ -51,8 +63,12 @@ async def lifespan(app: FastAPI):
 # Create FastAPI application
 app = FastAPI(
     title="Manga Translator API",
-    description="Backend API for translating manga speech bubbles using OCR and AI translation.",
-    version="1.0.0",
+    description=(
+        "Backend API for manga translation with:\n"
+        "- **Bubble Detection**: YOLOv11 via ONNX Runtime\n"
+        "- **OCR + Translation**: Gemini Vision with model failover"
+    ),
+    version="2.1.0",
     lifespan=lifespan,
 )
 
@@ -65,8 +81,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API router
-app.include_router(api_router)
+# Include API routers
+app.include_router(translation_router)
+app.include_router(detection_router)
 
 
 @app.get("/")
@@ -75,7 +92,8 @@ async def root():
     return {
         "status": "healthy",
         "service": "Manga Translator API",
-        "version": "1.0.0"
+        "version": "2.1.0",
+        "features": ["detection", "translation"]
     }
 
 
@@ -84,6 +102,9 @@ async def health_check():
     """Detailed health check endpoint."""
     return {
         "status": "healthy",
-        "ocr_engine": "loaded",
-        "translation_service": "available"
+        "services": {
+            "gemini_client": "available",
+            "yolo_detector": "available"
+        },
+        "architecture": "Gemini Vision + YOLOv11 ONNX"
     }
