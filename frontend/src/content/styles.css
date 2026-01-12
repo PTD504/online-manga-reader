@@ -1,0 +1,209 @@
+/**
+ * Manga Translator - Content Script Styles
+ * 
+ * Comic-style translation bubble overlay styling.
+ * Font is loaded via chrome.runtime.getURL for cross-origin injection.
+ */
+
+/* ============================================================================
+   Font Face - Comic Style Font (Bangers)
+   ============================================================================ */
+
+/* 
+ * Note: The font URL is injected dynamically via JavaScript because 
+ * chrome.runtime.getURL() cannot be used directly in CSS.
+ * This @font-face serves as a fallback structure.
+ */
+@font-face {
+  font-family: 'Bangers';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  /* Fallback to Google Fonts CDN */
+  src: url('https://fonts.gstatic.com/s/bangers/v24/FeVQS0BTqb0h60ACH5Q.woff2') format('woff2');
+}
+
+/* ============================================================================
+   Wrapper Container
+   ============================================================================ */
+
+.manga-translator-wrapper {
+  position: relative !important;
+  display: inline-block !important;
+  line-height: 0 !important;
+}
+
+/* ============================================================================
+   Translation Bubble
+   ============================================================================ */
+
+.manga-translator-bubble {
+  /* Positioning - set dynamically via JS */
+  position: absolute;
+  z-index: 9999;
+  
+  /* Box styling */
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 2px solid #333;
+  border-radius: 8px;
+  box-shadow: 
+    2px 2px 0 #333,
+    0 4px 12px rgba(0, 0, 0, 0.15);
+  
+  /* Text styling */
+  font-family: 'Bangers', 'Comic Sans MS', 'Chalkboard', cursive;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.2;
+  color: #1a1a1a;
+  text-align: center;
+  letter-spacing: 0.5px;
+  
+  /* Flexbox centering */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Padding and overflow */
+  padding: 4px 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  
+  /* Smooth appearance */
+  animation: bubble-appear 0.3s ease-out;
+  
+  /* Prevent text selection for cleaner UX */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ============================================================================
+   Bubble Size Variants (Applied dynamically based on box size)
+   ============================================================================ */
+
+.manga-translator-bubble--small {
+  font-size: 10px;
+  padding: 2px 4px;
+  border-width: 1px;
+  border-radius: 4px;
+}
+
+.manga-translator-bubble--medium {
+  font-size: 14px;
+  padding: 4px 8px;
+}
+
+.manga-translator-bubble--large {
+  font-size: 18px;
+  padding: 8px 12px;
+  border-radius: 12px;
+}
+
+/* ============================================================================
+   Hover Effects
+   ============================================================================ */
+
+.manga-translator-bubble:hover {
+  background-color: #fff;
+  transform: scale(1.02);
+  box-shadow: 
+    3px 3px 0 #333,
+    0 6px 16px rgba(0, 0, 0, 0.2);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+/* ============================================================================
+   Animations
+   ============================================================================ */
+
+@keyframes bubble-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================================================
+   Loading State
+   ============================================================================ */
+
+.manga-translator-bubble--loading {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(240, 240, 240, 0.95) 50%,
+    rgba(255, 255, 255, 0.95) 100%
+  );
+  background-size: 200% 100%;
+  animation: loading-shimmer 1.5s infinite;
+}
+
+@keyframes loading-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ============================================================================
+   Error State
+   ============================================================================ */
+
+.manga-translator-bubble--error {
+  background-color: rgba(255, 230, 230, 0.95);
+  border-color: #cc3333;
+  color: #aa0000;
+}
+
+/* ============================================================================
+   Dark Mode Support
+   ============================================================================ */
+
+@media (prefers-color-scheme: dark) {
+  .manga-translator-bubble {
+    background-color: rgba(40, 40, 40, 0.95);
+    border-color: #666;
+    color: #f0f0f0;
+    box-shadow: 
+      2px 2px 0 #666,
+      0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+  
+  .manga-translator-bubble:hover {
+    background-color: rgba(50, 50, 50, 0.98);
+  }
+}
+
+/* ============================================================================
+   Responsive Font Sizing
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .manga-translator-bubble {
+    font-size: 12px;
+    padding: 3px 6px;
+    border-radius: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  .manga-translator-bubble {
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    border-width: 1px;
+  }
+}
