@@ -30,7 +30,7 @@ const LANGUAGES = [
  */
 const DEFAULT_SETTINGS: Settings = {
     enabled: true,
-    targetLang: 'en',
+    targetLang: 'vi',
     backendUrl: 'http://localhost:8000',
 };
 

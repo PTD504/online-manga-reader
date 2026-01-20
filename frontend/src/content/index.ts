@@ -36,6 +36,12 @@ interface FetchImageResponse {
     error?: string;
 }
 
+interface ProxyApiResponse {
+    success: boolean;
+    data?: unknown;
+    error?: string;
+}
+
 type TranslationStatus = 'pending' | 'processing' | 'completed' | 'error';
 
 // ============================================================================
@@ -233,7 +239,7 @@ async function fetchImageViaBackground(imageUrl: string): Promise<Blob> {
         );
 
 
-        
+
     });
 }
 
@@ -292,27 +298,80 @@ async function cropFromBitmap(
 }
 
 // ============================================================================
-// API Communication
+// API Communication (via Background Proxy to bypass PNA restrictions)
 // ============================================================================
 
 /**
- * Step 1: Send image to detection API
+ * Convert a Blob to a base64 Data URL for Chrome message serialization.
+ * Chrome messaging cannot transfer Blob objects directly.
+ */
+function blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            if (typeof reader.result === 'string') {
+                resolve(reader.result);
+            } else {
+                reject(new Error('FileReader did not return a string'));
+            }
+        };
+        reader.onerror = () => reject(new Error('FileReader error'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+/**
+ * Send an API request via the background service worker proxy.
+ * This bypasses PNA (Private Network Access) restrictions that block
+ * content scripts from making requests to localhost.
+ */
+function proxyApiRequest(
+    url: string,
+    formDataParts: Array<{ name: string; data: string; filename?: string }>
+): Promise<ProxyApiResponse> {
+    return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(
+            {
+                type: 'PROXY_API_REQUEST',
+                url,
+                method: 'POST',
+                formDataParts,
+            },
+            (response: ProxyApiResponse) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(`Chrome runtime error: ${chrome.runtime.lastError.message}`));
+                    return;
+                }
+                if (!response) {
+                    reject(new Error('No response from background worker'));
+                    return;
+                }
+                resolve(response);
+            }
+        );
+    });
+}
+
+/**
+ * Step 1: Send image to detection API via background proxy.
  * Returns an array of bounding boxes, or empty array if detection fails.
  */
 async function detectBubbles(imageBlob: Blob): Promise<BoundingBox[]> {
-    const formData = new FormData();
-    formData.append('file', imageBlob, 'image.png');
+    // Convert blob to base64 data URL for message serialization
+    const imageDataUrl = await blobToDataUrl(imageBlob);
 
-    const response = await fetch(`${settings.backendUrl}/detect`, {
-        method: 'POST',
-        body: formData,
-    });
+    const formDataParts = [
+        { name: 'file', data: imageDataUrl, filename: 'image.png' },
+    ];
 
-    if (!response.ok) {
-        throw new Error(`Detection API error: ${response.status}`);
+    // Use background proxy to bypass PNA restrictions
+    const response = await proxyApiRequest(`${settings.backendUrl}/detect`, formDataParts);
+
+    if (!response.success) {
+        throw new Error(response.error || 'Detection API error');
     }
 
-    const data = await response.json();
+    const data = response.data;
 
     // Debug: Log raw response to understand structure
     console.log('[MangaTranslator] Raw detection response:', data);
@@ -326,7 +385,8 @@ async function detectBubbles(imageBlob: Blob): Promise<BoundingBox[]> {
         boxes = data;
     } else if (data && typeof data === 'object') {
         // Response is an object, try common field names
-        boxes = data.boxes || data.detections || data.results || data.data;
+        const dataObj = data as Record<string, unknown>;
+        boxes = (dataObj.boxes || dataObj.detections || dataObj.results || dataObj.data) as BoundingBox[] | undefined;
     }
 
     // Validate boxes is an array
@@ -355,23 +415,25 @@ async function detectBubbles(imageBlob: Blob): Promise<BoundingBox[]> {
 }
 
 /**
- * Step 3: Send cropped bubble to translation API
+ * Step 3: Send cropped bubble to translation API via background proxy.
  */
 async function translateBubble(croppedBlob: Blob): Promise<string> {
-    const formData = new FormData();
-    formData.append('file', croppedBlob, 'bubble.png');
-    formData.append('target_lang', settings.targetLang);
+    // Convert blob to base64 data URL for message serialization
+    const croppedDataUrl = await blobToDataUrl(croppedBlob);
 
-    const response = await fetch(`${settings.backendUrl}/translate-bubble`, {
-        method: 'POST',
-        body: formData,
-    });
+    const formDataParts = [
+        { name: 'file', data: croppedDataUrl, filename: 'bubble.png' },
+        { name: 'target_lang', data: settings.targetLang },
+    ];
 
-    if (!response.ok) {
-        throw new Error(`Translation API error: ${response.status}`);
+    // Use background proxy to bypass PNA restrictions
+    const response = await proxyApiRequest(`${settings.backendUrl}/translate-bubble`, formDataParts);
+
+    if (!response.success) {
+        throw new Error(response.error || 'Translation API error');
     }
 
-    const data: TranslationResponse = await response.json();
+    const data = response.data as TranslationResponse;
     return data.translated;
 }
 

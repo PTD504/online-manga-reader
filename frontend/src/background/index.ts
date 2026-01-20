@@ -43,6 +43,10 @@ chrome.runtime.onMessage.addListener(
                 handleFetchImageBlob(message, sendResponse);
                 break;
 
+            case 'PROXY_API_REQUEST':
+                handleProxyApiRequest(message, sendResponse);
+                break;
+
             case 'GET_SETTINGS':
                 handleGetSettings(sendResponse);
                 break;
@@ -222,6 +226,95 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 
         reader.readAsDataURL(blob);
     });
+}
+
+// ============================================================================
+// API Proxy Handler (CORS & PNA Bypass for localhost API calls)
+// ============================================================================
+
+/**
+ * Proxy API requests from content script to bypass PNA restrictions.
+ * Content scripts cannot directly fetch localhost due to Private Network Access rules.
+ * The service worker is exempt and can make these requests.
+ * 
+ * @param message - Contains { type: 'PROXY_API_REQUEST', url, method, formDataParts?, headers? }
+ * @param sendResponse - Callback to send response back to content script
+ */
+async function handleProxyApiRequest(
+    message: MessageRequest,
+    sendResponse: (response: MessageResponse) => void
+): Promise<void> {
+    const url = message.url as string;
+    const method = (message.method as string) || 'POST';
+    const formDataParts = message.formDataParts as Array<{ name: string; data: string; filename?: string; type?: string }> | undefined;
+    const headers = message.headers as Record<string, string> | undefined;
+
+    if (!url) {
+        sendResponse({ success: false, error: 'No URL provided' });
+        return;
+    }
+
+    console.log('[MangaTranslator:BG] Proxying API request:', method, url);
+
+    try {
+        // Build the request options
+        const fetchOptions: RequestInit = {
+            method,
+            headers: headers || {},
+        };
+
+        // If formDataParts is provided, reconstruct FormData
+        // (FormData cannot be serialized via Chrome messaging, so we pass parts as base64)
+        if (formDataParts && formDataParts.length > 0) {
+            const formData = new FormData();
+
+            for (const part of formDataParts) {
+                if (part.data.startsWith('data:') || part.data.includes(',')) {
+                    // It's a base64 data URL, convert to Blob
+                    const blob = await dataUrlToBlob(part.data);
+                    formData.append(part.name, blob, part.filename || 'file');
+                } else {
+                    // It's a plain string value
+                    formData.append(part.name, part.data);
+                }
+            }
+
+            fetchOptions.body = formData;
+        }
+
+        // Execute the fetch
+        const response = await fetch(url, fetchOptions);
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status} ${response.statusText}`);
+        }
+
+        // Parse JSON response
+        const data = await response.json();
+        console.log('[MangaTranslator:BG] API response received:', typeof data);
+
+        sendResponse({
+            success: true,
+            data: data,
+        });
+
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[MangaTranslator:BG] API proxy error:', errorMessage);
+        sendResponse({
+            success: false,
+            error: errorMessage,
+        });
+    }
+}
+
+/**
+ * Convert a Base64 Data URL to a Blob.
+ * Used to reconstruct FormData file parts from content script.
+ */
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+    const response = await fetch(dataUrl);
+    return response.blob();
 }
 
 // ============================================================================
