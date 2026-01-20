@@ -263,6 +263,11 @@ class BubbleDetector:
             bx2 = max(0, min(bx2, original_w))
             by2 = max(0, min(by2, original_h))
             
+            # Step 4: Validate box has positive dimensions
+            if bx2 <= bx1 or by2 <= by1:
+                logger.debug(f"Skipping invalid box with zero/negative dimensions: [{bx1}, {by1}, {bx2}, {by2}]")
+                continue
+            
             results.append({
                 'label': 'bubble',
                 'conf': round(conf, 4),

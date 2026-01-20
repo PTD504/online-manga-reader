@@ -96,3 +96,4 @@ async def detect_bubbles_endpoint(
             status_code=500,
             detail=f"Detection failed: {str(e)}"
         )
+
