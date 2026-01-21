@@ -27,7 +27,7 @@
         }
     },
     "background": {
-        "service_worker": "src/background/index.ts",
+        "service_worker": "src/background/main.ts",
         "type": "module"
     },
     "content_scripts": [
@@ -36,7 +36,7 @@
                 "<all_urls>"
             ],
             "js": [
-                "src/content/index.ts"
+                "src/content/main.ts"
             ],
             "css": [
                 "src/content/styles.css"
