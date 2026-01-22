@@ -80,14 +80,37 @@ export function fetchImageViaBackground(imageUrl: string): Promise<Blob> {
 }
 
 /**
+ * Get the auth token from Chrome storage.
+ * Returns null if not authenticated.
+ */
+export async function getAuthToken(): Promise<string | null> {
+    try {
+        const result = await chrome.storage.local.get(['supabaseAccessToken']);
+        return result.supabaseAccessToken || null;
+    } catch (error) {
+        console.error('[MangaTranslator] Failed to get auth token:', error);
+        return null;
+    }
+}
+
+/**
  * Send an API request via the background service worker proxy.
  * This bypasses PNA (Private Network Access) restrictions that block
  * content scripts from making requests to localhost.
+ * Includes Authorization header if user is authenticated.
  */
-export function proxyApiRequest(
+export async function proxyApiRequest(
     url: string,
     formDataParts: Array<{ name: string; data: string; filename?: string }>
 ): Promise<ProxyApiResponse> {
+    // Get auth token if available
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
     return new Promise((resolve, reject) => {
         chrome.runtime.sendMessage(
             {
@@ -95,6 +118,7 @@ export function proxyApiRequest(
                 url,
                 method: 'POST',
                 formDataParts,
+                headers,
             },
             (response: ProxyApiResponse) => {
                 if (chrome.runtime.lastError) {

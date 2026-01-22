@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Session } from '@supabase/supabase-js';
+import { supabase, initAuthListener, syncTokenToStorage } from '../lib/supabase';
+import Auth from './Auth';
 
 /**
  * Settings interface
@@ -41,13 +44,46 @@ function App() {
     const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
     const [status, setStatus] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(true);
+    const [session, setSession] = useState<Session | null>(null);
+    const [authChecking, setAuthChecking] = useState<boolean>(true);
 
     /**
-     * Load settings from storage on mount
+     * Initialize auth listener and check session on mount
      */
     useEffect(() => {
-        loadSettings();
+        // Initialize auth state listener
+        initAuthListener();
+
+        // Check current session
+        checkSession();
     }, []);
+
+    /**
+     * Load settings when authenticated
+     */
+    useEffect(() => {
+        if (session) {
+            loadSettings();
+        }
+    }, [session]);
+
+    /**
+     * Check current auth session
+     */
+    const checkSession = async (): Promise<void> => {
+        try {
+            const { data: { session: currentSession } } = await supabase.auth.getSession();
+            setSession(currentSession);
+
+            if (currentSession) {
+                await syncTokenToStorage();
+            }
+        } catch (error) {
+            console.error('Failed to check session:', error);
+        } finally {
+            setAuthChecking(false);
+        }
+    };
 
     /**
      * Load settings from Chrome storage
@@ -139,6 +175,50 @@ function App() {
         }
     }, []);
 
+    /**
+     * Handle logout
+     */
+    const handleLogout = async (): Promise<void> => {
+        try {
+            await supabase.auth.signOut();
+            setSession(null);
+            // Clear token from storage
+            await chrome.storage.local.remove(['supabaseAccessToken', 'supabaseRefreshToken']);
+        } catch (error) {
+            console.error('Failed to logout:', error);
+            setStatus('Failed to logout');
+        }
+    };
+
+    /**
+     * Handle successful authentication
+     */
+    const handleAuthSuccess = async (): Promise<void> => {
+        await checkSession();
+    };
+
+    // Show loading while checking auth
+    if (authChecking) {
+        return (
+            <div className="popup-container">
+                <div className="loading">Loading...</div>
+            </div>
+        );
+    }
+
+    // Show auth form if not logged in
+    if (!session) {
+        return (
+            <div className="popup-container">
+                <header className="popup-header">
+                    <h1>Manga Translator</h1>
+                </header>
+                <Auth onAuthSuccess={handleAuthSuccess} />
+            </div>
+        );
+    }
+
+    // Show main app if logged in
     if (loading) {
         return (
             <div className="popup-container">
@@ -151,8 +231,20 @@ function App() {
         <div className="popup-container">
             {/* Header */}
             <header className="popup-header">
-                <h1>🎌 Manga Translator</h1>
+                <h1>Manga Translator</h1>
+                <button
+                    className="logout-button"
+                    onClick={handleLogout}
+                    title="Logout"
+                >
+                    Logout
+                </button>
             </header>
+
+            {/* User Info */}
+            <div className="user-info">
+                <span>{session.user?.email}</span>
+            </div>
 
             {/* Main Content */}
             <main className="popup-content">
@@ -206,7 +298,7 @@ function App() {
                     onClick={handleReprocess}
                     disabled={!settings.enabled}
                 >
-                    🔄 Reprocess Page
+                    Reprocess Page
                 </button>
 
                 {/* Status Message */}
