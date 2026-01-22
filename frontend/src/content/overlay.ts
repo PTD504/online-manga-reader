@@ -83,6 +83,10 @@ export class OverlayManager {
         const width = (box.x2 - box.x1) * scaleX;
         const height = (box.y2 - box.y1) * scaleY;
 
+        // Dynamic font sizing based on bubble height to prevent text clipping
+        // Heuristic: scale font between 10px and 18px based on bubble height
+        const fontSize = Math.max(10, Math.min(height / 4, 18));
+
         const bubble = document.createElement('div');
         const sizeClass = this.getSizeClass(width, height);
         bubble.className = `manga-translator-bubble ${sizeClass}`;
@@ -94,6 +98,7 @@ export class OverlayManager {
             top: ${top}px;
             width: ${width}px;
             height: ${height}px;
+            font-size: ${fontSize}px;
         `;
 
         wrapper.appendChild(bubble);
