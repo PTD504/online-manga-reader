@@ -6,7 +6,7 @@
  */
 
 import type { BoundingBox, ProcessedBubble, Settings } from './types';
-import { fetchImageViaBackground, detectBubbles, translateBubble } from './network';
+import { fetchImageViaBackground, detectBubbles, translateBubble, getAuthToken } from './network';
 import { OverlayManager } from './overlay';
 
 /**
@@ -155,6 +155,13 @@ export class ImageProcessor {
      * Main processing pipeline for a detected image.
      */
     async processImage(img: HTMLImageElement): Promise<void> {
+        // Auth gatekeeper - check if user is logged in before processing
+        const token = await getAuthToken();
+        if (!token) {
+            console.warn('[MangaTranslator] Not authenticated. Please log in to use translation.');
+            return;
+        }
+
         if (this.shouldSkip(img)) return;
 
         const imageKey = this.getImageKey(img);
