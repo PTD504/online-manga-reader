@@ -7,10 +7,12 @@ Uses sequential processing with model failover for optimal Time-to-First-Token.
 
 import logging
 from enum import Enum
+from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, Query
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Query
 from pydantic import BaseModel
 
+from app.api.deps import get_current_user
 from app.services.translator import translate_image
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,8 @@ async def translate_bubble(
     target_lang: TargetLanguage = Query(
         default=TargetLanguage.VIETNAMESE,
         description="Target language for translation"
-    )
+    ),
+    current_user: dict[str, Any] = Depends(get_current_user)
 ) -> TranslationResponse:
     """
     Translate text from a manga speech bubble image.
