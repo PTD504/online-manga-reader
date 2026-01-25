@@ -13,19 +13,29 @@ interface Settings {
 }
 
 /**
- * Available target languages
+ * Available target languages - matches backend TargetLanguage enum exactly
  */
 const LANGUAGES = [
-    { code: 'en', name: 'English' },
-    { code: 'vi', name: 'Vietnamese' },
-    { code: 'ja', name: 'Japanese' },
-    { code: 'ko', name: 'Korean' },
-    { code: 'zh', name: 'Chinese' },
-    { code: 'es', name: 'Spanish' },
-    { code: 'fr', name: 'French' },
-    { code: 'de', name: 'German' },
-    { code: 'pt', name: 'Portuguese' },
-    { code: 'ru', name: 'Russian' },
+    { value: 'Vietnamese', label: 'Vietnamese' },
+    { value: 'English', label: 'English' },
+    { value: 'Japanese', label: 'Japanese' },
+    { value: 'Korean', label: 'Korean' },
+    { value: 'Chinese (Simplified)', label: 'Chinese (Simplified)' },
+    { value: 'Chinese (Traditional)', label: 'Chinese (Traditional)' },
+    { value: 'Spanish', label: 'Spanish' },
+    { value: 'French', label: 'French' },
+    { value: 'Portuguese', label: 'Portuguese' },
+    { value: 'Indonesian', label: 'Indonesian' },
+    { value: 'Thai', label: 'Thai' },
+    { value: 'Russian', label: 'Russian' },
+    { value: 'German', label: 'German' },
+    { value: 'Italian', label: 'Italian' },
+    { value: 'Arabic', label: 'Arabic' },
+    { value: 'Hindi', label: 'Hindi' },
+    { value: 'Filipino', label: 'Filipino' },
+    { value: 'Polish', label: 'Polish' },
+    { value: 'Turkish', label: 'Turkish' },
+    { value: 'Ukrainian', label: 'Ukrainian' },
 ];
 
 /**
@@ -33,7 +43,7 @@ const LANGUAGES = [
  */
 const DEFAULT_SETTINGS: Settings = {
     enabled: true,
-    targetLang: 'vi',
+    targetLang: 'Vietnamese',
     backendUrl: 'http://localhost:8000',
 };
 
@@ -51,10 +61,7 @@ function App() {
      * Initialize auth listener and check session on mount
      */
     useEffect(() => {
-        // Initialize auth state listener
         initAuthListener();
-
-        // Check current session
         checkSession();
     }, []);
 
@@ -176,13 +183,19 @@ function App() {
     }, []);
 
     /**
+     * Open options page for account management
+     */
+    const handleManageAccount = useCallback((): void => {
+        chrome.runtime.openOptionsPage();
+    }, []);
+
+    /**
      * Handle logout
      */
     const handleLogout = async (): Promise<void> => {
         try {
             await supabase.auth.signOut();
             setSession(null);
-            // Clear token from storage
             await chrome.storage.local.remove(['supabaseAccessToken', 'supabaseRefreshToken']);
         } catch (error) {
             console.error('Failed to logout:', error);
@@ -271,8 +284,8 @@ function App() {
                         disabled={!settings.enabled}
                     >
                         {LANGUAGES.map((lang) => (
-                            <option key={lang.code} value={lang.code}>
-                                {lang.name}
+                            <option key={lang.value} value={lang.value}>
+                                {lang.label}
                             </option>
                         ))}
                     </select>
@@ -292,14 +305,22 @@ function App() {
                     />
                 </div>
 
-                {/* Reprocess Button */}
-                <button
-                    className="action-button"
-                    onClick={handleReprocess}
-                    disabled={!settings.enabled}
-                >
-                    Reprocess Page
-                </button>
+                {/* Action Buttons */}
+                <div className="action-buttons">
+                    <button
+                        className="action-button"
+                        onClick={handleReprocess}
+                        disabled={!settings.enabled}
+                    >
+                        Reprocess Page
+                    </button>
+                    <button
+                        className="action-button action-button--secondary"
+                        onClick={handleManageAccount}
+                    >
+                        Manage Account
+                    </button>
+                </div>
 
                 {/* Status Message */}
                 {status && <div className="status-message">{status}</div>}
