@@ -1,7 +1,12 @@
+/**
+ * Popup App Component
+ * 
+ * Main extension popup. Checks auth state and directs users to dashboard for login.
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { Session } from '@supabase/supabase-js';
-import { supabase, initAuthListener, syncTokenToStorage } from '../lib/supabase';
-import Auth from './Auth';
+import { supabase, initAuthListener } from '../lib/supabase';
 
 /**
  * Settings interface
@@ -63,6 +68,15 @@ function App() {
     useEffect(() => {
         initAuthListener();
         checkSession();
+
+        // Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+        });
+
+        return () => {
+            subscription.unsubscribe();
+        };
     }, []);
 
     /**
@@ -81,10 +95,6 @@ function App() {
         try {
             const { data: { session: currentSession } } = await supabase.auth.getSession();
             setSession(currentSession);
-
-            if (currentSession) {
-                await syncTokenToStorage();
-            }
         } catch (error) {
             console.error('Failed to check session:', error);
         } finally {
@@ -183,32 +193,13 @@ function App() {
     }, []);
 
     /**
-     * Open options page for account management
+     * Open dashboard in new tab
      */
-    const handleManageAccount = useCallback((): void => {
-        chrome.runtime.openOptionsPage();
+    const openDashboard = useCallback((): void => {
+        chrome.tabs.create({
+            url: chrome.runtime.getURL('src/dashboard/index.html')
+        });
     }, []);
-
-    /**
-     * Handle logout
-     */
-    const handleLogout = async (): Promise<void> => {
-        try {
-            await supabase.auth.signOut();
-            setSession(null);
-            await chrome.storage.local.remove(['supabaseAccessToken', 'supabaseRefreshToken']);
-        } catch (error) {
-            console.error('Failed to logout:', error);
-            setStatus('Failed to logout');
-        }
-    };
-
-    /**
-     * Handle successful authentication
-     */
-    const handleAuthSuccess = async (): Promise<void> => {
-        await checkSession();
-    };
 
     // Show loading while checking auth
     if (authChecking) {
@@ -219,19 +210,27 @@ function App() {
         );
     }
 
-    // Show auth form if not logged in
+    // Show login prompt if not authenticated
     if (!session) {
         return (
             <div className="popup-container">
                 <header className="popup-header">
                     <h1>Manga Translator</h1>
                 </header>
-                <Auth onAuthSuccess={handleAuthSuccess} />
+                <div className="auth-prompt">
+                    <p>Please log in to use Manga Translator</p>
+                    <button
+                        className="action-button"
+                        onClick={openDashboard}
+                    >
+                        Open Dashboard
+                    </button>
+                </div>
             </div>
         );
     }
 
-    // Show main app if logged in
+    // Show main app if logged in (still loading settings)
     if (loading) {
         return (
             <div className="popup-container">
@@ -245,18 +244,18 @@ function App() {
             {/* Header */}
             <header className="popup-header">
                 <h1>Manga Translator</h1>
-                <button
-                    className="logout-button"
-                    onClick={handleLogout}
-                    title="Logout"
-                >
-                    Logout
-                </button>
             </header>
 
             {/* User Info */}
             <div className="user-info">
-                <span>{session.user?.email}</span>
+                <span>Hello, {session.user?.email}</span>
+                <button
+                    className="manage-account-button"
+                    onClick={openDashboard}
+                    title="Manage Account"
+                >
+                    Manage Account
+                </button>
             </div>
 
             {/* Main Content */}
@@ -313,12 +312,6 @@ function App() {
                         disabled={!settings.enabled}
                     >
                         Reprocess Page
-                    </button>
-                    <button
-                        className="action-button action-button--secondary"
-                        onClick={handleManageAccount}
-                    >
-                        Manage Account
                     </button>
                 </div>
 
