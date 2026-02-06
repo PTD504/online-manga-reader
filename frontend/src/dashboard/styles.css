@@ -1,0 +1,273 @@
+/**
+ * Dashboard Styles
+ * Basic CSS styles for dashboard pages.
+ * 
+ * NOTE: TailwindCSS is not installed. These are equivalent CSS styles
+ * for the Tailwind utility classes used in the components.
+ * 
+ * To use TailwindCSS instead, install it with:
+ * npm install -D tailwindcss postcss autoprefixer
+ * npx tailwindcss init -p
+ */
+
+/* Reset and base styles */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.5;
+}
+
+/* Utility classes (Tailwind equivalents) */
+.min-h-screen {
+    min-height: 100vh;
+}
+
+.flex {
+    display: flex;
+}
+
+.items-center {
+    align-items: center;
+}
+
+.justify-center {
+    justify-content: center;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
+
+.flex-1 {
+    flex: 1 1 0%;
+}
+
+.space-y-3>*+* {
+    margin-top: 0.75rem;
+}
+
+.space-y-4>*+* {
+    margin-top: 1rem;
+}
+
+/* Spacing */
+.p-3 {
+    padding: 0.75rem;
+}
+
+.p-4 {
+    padding: 1rem;
+}
+
+.p-6 {
+    padding: 1.5rem;
+}
+
+.py-2 {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.px-3 {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+}
+
+.mb-1 {
+    margin-bottom: 0.25rem;
+}
+
+.mb-4 {
+    margin-bottom: 1rem;
+}
+
+.mb-6 {
+    margin-bottom: 1.5rem;
+}
+
+.mt-1 {
+    margin-top: 0.25rem;
+}
+
+.mx-auto {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Sizing */
+.w-full {
+    width: 100%;
+}
+
+.max-w-md {
+    max-width: 28rem;
+}
+
+/* Typography */
+.text-xl {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+}
+
+.text-sm {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+
+.text-xs {
+    font-size: 0.75rem;
+    line-height: 1rem;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.font-bold {
+    font-weight: 700;
+}
+
+.font-medium {
+    font-weight: 500;
+}
+
+.capitalize {
+    text-transform: capitalize;
+}
+
+/* Colors */
+.bg-gray-100 {
+    background-color: #f3f4f6;
+}
+
+.bg-gray-200 {
+    background-color: #e5e7eb;
+}
+
+.bg-white {
+    background-color: #ffffff;
+}
+
+.bg-blue-500 {
+    background-color: #3b82f6;
+}
+
+.bg-red-100 {
+    background-color: #fee2e2;
+}
+
+.bg-green-100 {
+    background-color: #dcfce7;
+}
+
+.text-gray-500 {
+    color: #6b7280;
+}
+
+.text-gray-600 {
+    color: #4b5563;
+}
+
+.text-gray-800 {
+    color: #1f2937;
+}
+
+.text-white {
+    color: #ffffff;
+}
+
+.text-blue-600 {
+    color: #2563eb;
+}
+
+.text-red-700 {
+    color: #b91c1c;
+}
+
+.text-green-700 {
+    color: #15803d;
+}
+
+/* Borders */
+.border {
+    border: 1px solid #e5e7eb;
+}
+
+.border-b {
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.border-b-2 {
+    border-bottom: 2px solid;
+}
+
+.border-blue-500 {
+    border-color: #3b82f6;
+}
+
+.border-red-300 {
+    border-color: #fca5a5;
+}
+
+.border-green-300 {
+    border-color: #86efac;
+}
+
+.rounded {
+    border-radius: 0.25rem;
+}
+
+/* Interactive states */
+.hover\:bg-blue-600:hover {
+    background-color: #2563eb;
+}
+
+.hover\:bg-gray-300:hover {
+    background-color: #d1d5db;
+}
+
+.focus\:outline-none:focus {
+    outline: none;
+}
+
+.focus\:ring-1:focus {
+    box-shadow: 0 0 0 1px #3b82f6;
+}
+
+.focus\:ring-blue-500:focus {
+    box-shadow: 0 0 0 1px #3b82f6;
+}
+
+/* Disabled states */
+.disabled\:opacity-50:disabled {
+    opacity: 0.5;
+}
+
+.disabled\:cursor-not-allowed:disabled {
+    cursor: not-allowed;
+}
+
+/* Form elements */
+input,
+button,
+select {
+    font-family: inherit;
+    font-size: inherit;
+}
+
+input:disabled,
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+button {
+    cursor: pointer;
+    border: none;
+}

@@ -14,6 +14,7 @@ export default defineConfig({
             input: {
                 popup: 'src/popup/index.html',
                 options: 'src/options/index.html',
+                dashboard: 'src/dashboard/index.html',
             },
         },
     },

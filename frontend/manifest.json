@@ -48,7 +48,8 @@
     "web_accessible_resources": [
         {
             "resources": [
-                "src/content/styles.css"
+                "src/content/styles.css",
+                "src/dashboard/index.html"
             ],
             "matches": [
                 "<all_urls>"
