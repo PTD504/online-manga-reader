@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from app.api.deps import get_current_user
 from app.services.translator import translate_image
+from app.services.credits import check_credits, deduct_credit, log_usage
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +83,14 @@ async def translate_bubble(
         )
     
     try:
+        # Get user ID from authenticated user
+        user_id = current_user["id"]
+        
+        # Check if user has credits (raises 402 if not)
+        await check_credits(user_id)
+        
         # Read image bytes
-        logger.info(f"Processing image: {file.filename}")
+        logger.info(f"Processing image: {file.filename} for user {user_id}")
         image_bytes = await file.read()
         
         if not image_bytes:
@@ -93,10 +100,13 @@ async def translate_bubble(
             )
         
         # Translate using Gemini Vision with failover
-        # Pass the enum value (string) to the translator
         result = await translate_image(image_bytes, target_lang.value)
         
-        logger.info(f"Translation complete -> {target_lang.value}")
+        # Deduct credit and log usage after successful translation
+        await deduct_credit(user_id)
+        await log_usage(user_id, tokens_spent=1)
+        
+        logger.info(f"Translation complete -> {target_lang.value}, credit deducted")
         return TranslationResponse(
             original=result.get("original", ""),
             translated=result.get("translated", "")
