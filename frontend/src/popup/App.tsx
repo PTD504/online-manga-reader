@@ -143,9 +143,28 @@ function App() {
 
     /**
      * Toggle extension enabled state
+     * When enabling, automatically trigger page reprocessing
      */
-    const handleToggleEnabled = useCallback((): void => {
-        saveSettings({ ...settings, enabled: !settings.enabled });
+    const handleToggleEnabled = useCallback(async (): Promise<void> => {
+        const newEnabled = !settings.enabled;
+        await saveSettings({ ...settings, enabled: newEnabled });
+
+        // Auto-trigger reprocess when enabling
+        if (newEnabled) {
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (tab?.id) {
+                    await chrome.tabs.sendMessage(tab.id, { type: 'REPROCESS_PAGE' });
+                    setStatus('Translation enabled! Processing page...');
+                    setTimeout(() => setStatus(''), 2000);
+                }
+            } catch {
+                // Ignore connection errors - content script may not be loaded on this page
+                console.log('[Popup] Content script not available on this page');
+                setStatus('Translation enabled!');
+                setTimeout(() => setStatus(''), 2000);
+            }
+        }
     }, [settings, saveSettings]);
 
     /**
@@ -186,9 +205,11 @@ function App() {
                 setStatus('Page reprocessing...');
                 setTimeout(() => setStatus(''), 2000);
             }
-        } catch (error) {
-            console.error('Failed to reprocess page:', error);
-            setStatus('Failed to reprocess page');
+        } catch {
+            // Ignore connection errors - content script may not be loaded on this page
+            console.log('[Popup] Content script not available on this page');
+            setStatus('Not available on this page');
+            setTimeout(() => setStatus(''), 2000);
         }
     }, []);
 

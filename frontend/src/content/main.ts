@@ -11,10 +11,10 @@ import { ImageProcessor } from './processor';
 // State management
 const imageStates = new Map<string, TranslationStatus>();
 
-// Default settings
+// Default settings - must match popup defaults
 let settings: Settings = {
     enabled: true,
-    targetLang: 'en',
+    targetLang: 'Vietnamese',
     backendUrl: 'http://localhost:8000',
 };
 
@@ -29,7 +29,7 @@ async function loadSettings(): Promise<void> {
         const result = await chrome.storage.sync.get(['enabled', 'targetLang', 'backendUrl']);
         settings = {
             enabled: result.enabled ?? true,
-            targetLang: result.targetLang ?? 'en',
+            targetLang: result.targetLang ?? 'Vietnamese',
             backendUrl: result.backendUrl ?? 'http://localhost:8000',
         };
         console.log('[MangaTranslator] Settings loaded:', settings);
@@ -64,6 +64,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
  */
 function handleIntersection(entries: IntersectionObserverEntry[]): void {
     if (!settings.enabled) return;
+    if (!processor) return;  // Safety check: processor may be undefined if init returned early
 
     for (const entry of entries) {
         if (entry.isIntersecting) {
@@ -151,20 +152,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 /**
- * Initialize the content script
+ * Initialize the content script.
+ * Always initializes observers - the enabled check happens in handleIntersection.
  */
 async function init(): Promise<void> {
     console.log('[MangaTranslator] Content script loaded');
 
     await loadSettings();
 
-    if (!settings.enabled) {
-        console.log('[MangaTranslator] Extension is disabled');
-        return;
-    }
-
+    // Always create the processor (needed for when user enables later)
     processor = new ImageProcessor(settings, imageStates);
 
+    // Always create observers - they will respect settings.enabled in callbacks
     const intersectionObserver = createIntersectionObserver();
     observeImages(intersectionObserver);
 
@@ -174,7 +173,7 @@ async function init(): Promise<void> {
         subtree: true,
     });
 
-    console.log('[MangaTranslator] Observers initialized');
+    console.log('[MangaTranslator] Observers initialized, enabled:', settings.enabled);
 }
 
 // Start the extension
