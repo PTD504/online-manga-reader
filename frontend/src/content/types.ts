@@ -37,6 +37,7 @@ export interface FetchImageResponse {
 // Response from PROXY_API_REQUEST message
 export interface ProxyApiResponse {
     success: boolean;
+    status?: number;  // HTTP status code for error handling
     data?: unknown;
     error?: string;
 }

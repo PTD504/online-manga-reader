@@ -80,13 +80,24 @@ export function fetchImageViaBackground(imageUrl: string): Promise<Blob> {
 }
 
 /**
+ * Storage key for access token - must match the key used in supabase.ts
+ */
+const AUTH_TOKEN_KEY = 'manga-translator-access-token';
+
+/**
  * Get the auth token from Chrome storage.
  * Returns null if not authenticated.
  */
 export async function getAuthToken(): Promise<string | null> {
     try {
-        const result = await chrome.storage.local.get(['supabaseAccessToken']);
-        return result.supabaseAccessToken || null;
+        const result = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
+        const token = result[AUTH_TOKEN_KEY] || null;
+        if (token) {
+            console.log('[MangaTranslator] Auth token found');
+        } else {
+            console.log('[MangaTranslator] No auth token - user not logged in');
+        }
+        return token;
     } catch (error) {
         console.error('[MangaTranslator] Failed to get auth token:', error);
         return null;
@@ -192,6 +203,7 @@ export async function detectBubbles(imageBlob: Blob, settings: Settings): Promis
 
 /**
  * Send cropped bubble to translation API via background proxy.
+ * Handles authentication (401) and credit (402) errors.
  */
 export async function translateBubble(croppedBlob: Blob, settings: Settings): Promise<string> {
     const croppedDataUrl = await blobToDataUrl(croppedBlob);
@@ -204,6 +216,26 @@ export async function translateBubble(croppedBlob: Blob, settings: Settings): Pr
     const response = await proxyApiRequest(`${settings.backendUrl}/translate-bubble`, formDataParts);
 
     if (!response.success) {
+        const status = response.status || 0;
+
+        // Handle 401 Unauthorized - clear session
+        if (status === 401) {
+            console.error('[MangaTranslator] Session expired or invalid. Please log in again.');
+            try {
+                await chrome.storage.local.remove(['supabaseSession', 'supabaseAccessToken', 'supabaseRefreshToken']);
+                console.log('[MangaTranslator] Session cleared from storage.');
+            } catch (e) {
+                console.error('[MangaTranslator] Failed to clear session:', e);
+            }
+            throw new Error('Session expired. Please log in again.');
+        }
+
+        // Handle 402 Payment Required - out of credits
+        if (status === 402) {
+            console.error('[MangaTranslator] Out of credits. Please purchase more credits to continue.');
+            throw new Error('Out of credits');
+        }
+
         throw new Error(response.error || 'Translation API error');
     }
 

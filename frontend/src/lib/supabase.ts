@@ -20,6 +20,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
+ * Storage key for access token - used by both dashboard and content script.
+ * Content script reads this directly from chrome.storage.local.
+ */
+export const AUTH_TOKEN_KEY = 'manga-translator-access-token';
+
+/**
  * Custom storage adapter for Chrome Extension.
  * Uses chrome.storage.local for session persistence across popup/dashboard.
  * 
@@ -132,10 +138,17 @@ export async function signOut(): Promise<void> {
  * Logs auth state changes for debugging.
  */
 export function initAuthListener(): void {
-    supabase.auth.onAuthStateChange((event, session) => {
+    supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('[MangaTranslator] Auth state changed:', event);
         if (session) {
             console.log('[MangaTranslator] User:', session.user?.email);
+            // Store access token for content script to read
+            await chrome.storage.local.set({ [AUTH_TOKEN_KEY]: session.access_token });
+            console.log('[MangaTranslator] Access token stored for content script');
+        } else {
+            // Clear access token on logout
+            await chrome.storage.local.remove(AUTH_TOKEN_KEY);
+            console.log('[MangaTranslator] Access token cleared');
         }
     });
 }

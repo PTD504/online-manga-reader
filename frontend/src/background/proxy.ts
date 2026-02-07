@@ -209,16 +209,34 @@ export async function handleProxyApiRequest(
         }
 
         const response = await fetch(url, fetchOptions);
+        const status = response.status;
 
-        if (!response.ok) {
-            throw new Error(`API error: ${response.status} ${response.statusText}`);
+        // Try to parse response body regardless of status
+        let data = null;
+        let errorDetail = '';
+        try {
+            data = await response.json();
+            errorDetail = data?.detail || '';
+        } catch {
+            // Response might not be JSON
         }
 
-        const data = await response.json();
+        if (!response.ok) {
+            console.error(`[MangaTranslator:BG] API error: ${status} ${response.statusText}`);
+            sendResponse({
+                success: false,
+                status,
+                error: errorDetail || `API error: ${status} ${response.statusText}`,
+                data,
+            });
+            return;
+        }
+
         console.log('[MangaTranslator:BG] API response received:', typeof data);
 
         sendResponse({
             success: true,
+            status,
             data: data,
         });
 
@@ -227,6 +245,7 @@ export async function handleProxyApiRequest(
         console.error('[MangaTranslator:BG] API proxy error:', errorMessage);
         sendResponse({
             success: false,
+            status: 0,
             error: errorMessage,
         });
     }
