@@ -57,11 +57,12 @@ export async function cropFromBitmap(bitmap: ImageBitmap, box: BoundingBox): Pro
 async function processSingleBubble(
     bitmap: ImageBitmap,
     box: BoundingBox,
-    settings: Settings
+    settings: Settings,
+    sourceImageUrl?: string
 ): Promise<ProcessedBubble | null> {
     try {
         const croppedBlob = await cropFromBitmap(bitmap, box);
-        const translatedText = await translateBubble(croppedBlob, settings);
+        const translatedText = await translateBubble(croppedBlob, settings, sourceImageUrl);
         return { box, translatedText };
     } catch (error) {
         console.error('[MangaTranslator] Failed to process bubble:', error);
@@ -76,13 +77,14 @@ async function processSingleBubble(
 export async function processBubblesInParallel(
     bitmap: ImageBitmap,
     boxes: BoundingBox[],
-    settings: Settings
+    settings: Settings,
+    sourceImageUrl?: string
 ): Promise<ProcessedBubble[]> {
     console.log(`[MangaTranslator] Processing ${boxes.length} bubbles in parallel...`);
 
     const startTime = performance.now();
 
-    const promises = boxes.map((box) => processSingleBubble(bitmap, box, settings));
+    const promises = boxes.map((box) => processSingleBubble(bitmap, box, settings, sourceImageUrl));
     const results = await Promise.all(promises);
 
     const successfulResults = results.filter((r): r is ProcessedBubble => r !== null);
@@ -206,8 +208,8 @@ export class ImageProcessor {
             // Create overlay manager
             const overlayManager = new OverlayManager(img, naturalWidth, naturalHeight);
 
-            // Process all bubbles in parallel
-            const processedBubbles = await processBubblesInParallel(bitmap, boxes, this.settings);
+            // Process all bubbles in parallel, passing original image URL for idempotency
+            const processedBubbles = await processBubblesInParallel(bitmap, boxes, this.settings, imageUrl);
 
             // Render translation overlays
             for (const bubble of processedBubbles) {

@@ -204,13 +204,21 @@ export async function detectBubbles(imageBlob: Blob, settings: Settings): Promis
 /**
  * Send cropped bubble to translation API via background proxy.
  * Handles authentication (401) and credit (402) errors.
+ * @param croppedBlob The cropped bubble image
+ * @param settings User settings including backend URL and target language
+ * @param sourceImageUrl Original full image URL for pay-per-page idempotency
  */
-export async function translateBubble(croppedBlob: Blob, settings: Settings): Promise<string> {
+export async function translateBubble(
+    croppedBlob: Blob,
+    settings: Settings,
+    sourceImageUrl?: string
+): Promise<string> {
     const croppedDataUrl = await blobToDataUrl(croppedBlob);
 
     const formDataParts = [
         { name: 'file', data: croppedDataUrl, filename: 'bubble.png' },
         { name: 'target_lang', data: settings.targetLang },
+        { name: 'source_image_url', data: sourceImageUrl || '' },
     ];
 
     const response = await proxyApiRequest(`${settings.backendUrl}/translate-bubble`, formDataParts);

@@ -1,15 +1,21 @@
 /**
  * Manga Translator - Content Script Entry Point
  * 
- * Initializes observers, loads settings, and orchestrates the translation flow:
- * Observer -> Processor -> Network -> Overlay
+ * Phase 3.1: Active Translation Mode
+ * - Floating widget toggles "Active Mode" on/off
+ * - IntersectionObserver only processes images when Active Mode is ON
+ * - Supports lazy-loading: new images auto-translate as they enter viewport
  */
 
 import type { Settings, TranslationStatus } from './types';
 import { ImageProcessor } from './processor';
+import { initWidget } from './widget';
 
 // State management
 const imageStates = new Map<string, TranslationStatus>();
+
+// Active Translation Mode flag
+let isTranslatingActive = false;
 
 // Default settings - must match popup defaults
 let settings: Settings = {
@@ -20,6 +26,10 @@ let settings: Settings = {
 
 // Processor instance
 let processor: ImageProcessor;
+
+// Observers
+let intersectionObserver: IntersectionObserver | null = null;
+let mutationObserver: MutationObserver | null = null;
 
 /**
  * Load settings from Chrome storage
@@ -59,23 +69,56 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 });
 
 /**
+ * Check if an image should be processed (is a manga image, not already done)
+ */
+function shouldProcessImage(img: HTMLImageElement): boolean {
+    // Skip if already processed or processing
+    const state = imageStates.get(img.src);
+    if (state === 'completed' || state === 'processing') return false;
+
+    // Skip data/blob URLs (can't track for idempotency)
+    if (!img.src || img.src.startsWith('data:') || img.src.startsWith('blob:')) return false;
+
+    // Skip small images (likely icons)
+    const width = img.naturalWidth || img.width;
+    const height = img.naturalHeight || img.height;
+    if (width < 200 || height < 200) return false;
+
+    return true;
+}
+
+/**
+ * Find all manga images on the page that should be translated.
+ */
+function findMangaImages(): HTMLImageElement[] {
+    const images = Array.from(document.querySelectorAll('img'));
+    return images.filter(shouldProcessImage);
+}
+
+/**
  * Callback for IntersectionObserver.
- * Processes images as they enter the viewport.
+ * Only processes images when Active Translation Mode is ON.
  */
 function handleIntersection(entries: IntersectionObserverEntry[]): void {
-    if (!settings.enabled) return;
-    if (!processor) return;  // Safety check: processor may be undefined if init returned early
+    // Only process if Active Mode is enabled
+    if (!isTranslatingActive) return;
+    if (!processor) return;
 
     for (const entry of entries) {
         if (entry.isIntersecting) {
             const img = entry.target as HTMLImageElement;
-            processor.processImage(img);
+
+            // Double-check this image should be processed
+            if (shouldProcessImage(img)) {
+                console.log('[MangaTranslator] Auto-translating visible image:', img.src.substring(0, 60) + '...');
+                processor.processImage(img);
+            }
         }
     }
 }
 
 /**
- * Create and configure the IntersectionObserver
+ * Create IntersectionObserver for viewport detection
  */
 function createIntersectionObserver(): IntersectionObserver {
     return new IntersectionObserver(handleIntersection, {
@@ -88,34 +131,102 @@ function createIntersectionObserver(): IntersectionObserver {
 /**
  * Observe all images on the page
  */
-function observeImages(observer: IntersectionObserver): void {
+function observeImages(): void {
+    if (!intersectionObserver) return;
+
     const images = document.querySelectorAll('img');
     images.forEach((img) => {
         if (!img.dataset.mangaTranslatorObserved) {
             img.dataset.mangaTranslatorObserved = 'true';
-            observer.observe(img);
+            intersectionObserver!.observe(img);
         }
     });
 }
 
 /**
- * Watch for dynamically added images (infinite scroll, lazy load, etc.)
+ * Create MutationObserver to watch for new images (lazy loading, infinite scroll)
  */
-function createMutationObserver(intersectionObserver: IntersectionObserver): MutationObserver {
+function createMutationObserver(): MutationObserver {
     return new MutationObserver((mutations) => {
+        // Only observe new images if Active Mode is on
+        if (!isTranslatingActive) return;
+
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
                 if (node instanceof HTMLImageElement) {
-                    observeImages(intersectionObserver);
+                    observeImages();
                 } else if (node instanceof HTMLElement) {
                     const images = node.querySelectorAll('img');
                     if (images.length > 0) {
-                        observeImages(intersectionObserver);
+                        observeImages();
                     }
                 }
             }
         }
     });
+}
+
+/**
+ * Start Active Translation Mode
+ */
+async function startTranslating(targetLang: string): Promise<void> {
+    console.log('[MangaTranslator] Starting Active Translation Mode');
+
+    // Update settings with new target language
+    settings.targetLang = targetLang;
+    chrome.storage.sync.set({ targetLang });
+
+    if (processor) {
+        processor.updateSettings(settings);
+    }
+
+    // Set active flag
+    isTranslatingActive = true;
+
+    // Create observers if not already created
+    if (!intersectionObserver) {
+        intersectionObserver = createIntersectionObserver();
+    }
+    if (!mutationObserver) {
+        mutationObserver = createMutationObserver();
+        mutationObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+        });
+    }
+
+    // Observe all current images
+    observeImages();
+
+    // Process all currently visible manga images immediately
+    const images = findMangaImages();
+    console.log(`[MangaTranslator] Processing ${images.length} visible images`);
+
+    for (const img of images) {
+        // Process in background (don't await each one for better UX)
+        processor.processImage(img);
+    }
+}
+
+/**
+ * Stop Active Translation Mode
+ */
+function stopTranslating(): void {
+    console.log('[MangaTranslator] Stopping Active Translation Mode');
+    isTranslatingActive = false;
+    // Note: We keep observers alive but they will early-return in their callbacks
+}
+
+/**
+ * Toggle translation mode - called by widget
+ * @returns The new active state
+ */
+export function toggleTranslation(isActive: boolean, targetLang: string): void {
+    if (isActive) {
+        startTranslating(targetLang);
+    } else {
+        stopTranslating();
+    }
 }
 
 /**
@@ -129,6 +240,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             sendResponse({
                 enabled: settings.enabled,
                 processedCount: imageStates.size,
+                isTranslatingActive,
             });
             break;
 
@@ -139,8 +251,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
         case 'REPROCESS_PAGE':
             imageStates.clear();
-            const observer = createIntersectionObserver();
-            observeImages(observer);
+            if (isTranslatingActive) {
+                startTranslating(settings.targetLang);
+            }
             sendResponse({ success: true });
             break;
 
@@ -153,27 +266,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 /**
  * Initialize the content script.
- * Always initializes observers - the enabled check happens in handleIntersection.
+ * Creates processor and mounts the floating widget.
  */
 async function init(): Promise<void> {
-    console.log('[MangaTranslator] Content script loaded');
+    console.log('[MangaTranslator] Content script loaded (Phase 3.1 - Active Mode)');
 
     await loadSettings();
 
-    // Always create the processor (needed for when user enables later)
+    // Create the processor
     processor = new ImageProcessor(settings, imageStates);
 
-    // Always create observers - they will respect settings.enabled in callbacks
-    const intersectionObserver = createIntersectionObserver();
-    observeImages(intersectionObserver);
+    // Initialize the floating widget with toggle callback
+    initWidget(toggleTranslation);
 
-    const mutationObserver = createMutationObserver(intersectionObserver);
-    mutationObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-    });
-
-    console.log('[MangaTranslator] Observers initialized, enabled:', settings.enabled);
+    console.log('[MangaTranslator] Widget initialized, ready for user interaction');
 }
 
 // Start the extension
