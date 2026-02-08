@@ -9,7 +9,7 @@ import logging
 from enum import Enum
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from pydantic import BaseModel
 
 from app.api.deps import get_current_user
@@ -59,6 +59,10 @@ async def translate_bubble(
         default=TargetLanguage.VIETNAMESE,
         description="Target language for translation"
     ),
+    source_image_url: str = Form(
+        default="",
+        description="Original image URL for pay-per-page idempotency"
+    ),
     current_user: dict[str, Any] = Depends(get_current_user)
 ) -> TranslationResponse:
     """
@@ -68,9 +72,13 @@ async def translate_bubble(
     
     Uses model failover: gemini-2.5-flash-lite -> gemini-2.0-flash on rate limits.
     
+    Implements pay-per-page idempotency: if source_image_url was processed
+    within the last 24 hours, no credit is deducted (free re-translation).
+    
     Args:
         file: Image file (PNG, JPG, WEBP, etc.)
         target_lang: Target language for translation (dropdown selection)
+        source_image_url: Original image URL for idempotency tracking
         
     Returns:
         TranslationResponse with original and translated text.
@@ -103,8 +111,10 @@ async def translate_bubble(
         result = await translate_image(image_bytes, target_lang.value)
         
         # Deduct credit and log usage after successful translation
-        await deduct_credit(user_id)
-        await log_usage(user_id, tokens_spent=1)
+        # Pass resource_id for idempotency (empty string -> None)
+        resource_id = source_image_url.strip() if source_image_url else None
+        await deduct_credit(user_id, resource_id=resource_id)
+        await log_usage(user_id, tokens_spent=1, resource_id=resource_id)
         
         logger.info(f"Translation complete -> {target_lang.value}, credit deducted")
         return TranslationResponse(

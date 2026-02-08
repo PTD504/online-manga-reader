@@ -63,24 +63,78 @@ async def check_credits(user_id: str) -> int:
         )
 
 
-async def deduct_credit(user_id: str) -> int:
+async def check_recent_usage(user_id: str, resource_id: str) -> bool:
     """
-    Atomically deduct 1 credit from user's balance.
+    Check if user has already processed this resource within the last 24 hours.
+    
+    Args:
+        user_id: The authenticated user's ID
+        resource_id: The resource identifier (image URL)
+        
+    Returns:
+        True if resource was processed recently (free pass), False otherwise
+    """
+    try:
+        from datetime import timedelta
+        supabase = get_supabase_client()
+        
+        # Calculate 24 hours ago
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+        cutoff_str = cutoff_time.isoformat()
+        
+        response = supabase.table("usage_logs") \
+            .select("id") \
+            .eq("user_id", user_id) \
+            .eq("resource_id", resource_id) \
+            .gte("created_at", cutoff_str) \
+            .limit(1) \
+            .execute()
+        
+        if response.data and len(response.data) > 0:
+            logger.info(f"User {user_id} already processed resource within 24h: {resource_id[:80]}...")
+            return True
+        
+        return False
+        
+    except Exception as e:
+        logger.error(f"Failed to check recent usage for user {user_id}: {e}")
+        # On error, allow deduction (fail-safe)
+        return False
+
+
+async def deduct_credit(user_id: str, resource_id: str | None = None) -> int:
+    """
+    Atomically deduct 1 credit from user's balance with idempotency support.
+    
+    If resource_id is provided, checks if the same resource was processed
+    within the last 24 hours. If so, returns current balance without deducting
+    (free pass for re-translation of same image).
     
     Uses SQL atomic operation: credits = credits - 1
     This prevents race conditions when multiple requests are processed.
     
     Args:
         user_id: The authenticated user's ID
+        resource_id: Optional resource identifier for idempotency (image URL)
         
     Returns:
-        New credit balance after deduction
+        New credit balance after deduction (or current balance if free pass)
         
     Raises:
         HTTPException 500: If database update fails
     """
     try:
         supabase = get_supabase_client()
+        
+        # Check idempotency if resource_id is provided
+        if resource_id:
+            is_recent = await check_recent_usage(user_id, resource_id)
+            if is_recent:
+                # Free pass - return current balance without deducting
+                response = supabase.table("profiles").select("credits").eq("id", user_id).single().execute()
+                current_balance = response.data.get("credits", 0) if response.data else 0
+                logger.info(f"Free pass for user {user_id} - already processed this resource")
+                return current_balance
         
         # Use RPC for atomic decrement
         response = supabase.rpc(
@@ -113,7 +167,7 @@ async def deduct_credit(user_id: str) -> int:
         )
 
 
-async def log_usage(user_id: str, tokens_spent: int = 1, url_domain: str | None = None) -> None:
+async def log_usage(user_id: str, tokens_spent: int = 1, url_domain: str | None = None, resource_id: str | None = None) -> None:
     """
     Log a usage record for billing and analytics.
     
@@ -121,6 +175,7 @@ async def log_usage(user_id: str, tokens_spent: int = 1, url_domain: str | None 
         user_id: The authenticated user's ID
         tokens_spent: Number of tokens/credits spent (default 1)
         url_domain: Optional domain where translation was performed
+        resource_id: Optional resource identifier (image URL) for idempotency
         
     Raises:
         HTTPException 500: If database insert fails
@@ -132,10 +187,11 @@ async def log_usage(user_id: str, tokens_spent: int = 1, url_domain: str | None 
             "user_id": user_id,
             "tokens_spent": tokens_spent,
             "url_domain": url_domain,
+            "resource_id": resource_id,
         }
         
         supabase.table("usage_logs").insert(usage_record).execute()
-        logger.info(f"Logged usage for user {user_id}: {tokens_spent} tokens")
+        logger.info(f"Logged usage for user {user_id}: {tokens_spent} tokens, resource: {resource_id[:80] if resource_id else 'N/A'}...")
         
     except Exception as e:
         # Log error but don't fail the request - usage logging is not critical
