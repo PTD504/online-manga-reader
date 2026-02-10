@@ -16,6 +16,8 @@ export interface BoundingBox {
 export interface TranslationResponse {
     translated: string;
     original?: string;
+    should_render: boolean;
+    clean_image?: string | null;
 }
 
 // User settings stored in Chrome storage
@@ -59,4 +61,6 @@ export type TranslationStatus = 'pending' | 'processing' | 'completed' | 'error'
 export interface ProcessedBubble {
     box: BoundingBox;
     translatedText: string;
+    shouldRender: boolean;
+    cleanImage?: string | null;
 }

@@ -269,12 +269,13 @@ function MangaWidget({ onToggleTranslation }: MangaWidgetProps) {
     chrome.storage.sync.set({ targetLang: lang });
   }, []);
 
-  // Handle toggle button click
+  // Handle toggle button click — auto-collapse the panel for snappy UX
   const handleToggle = useCallback(() => {
     if (!isAuthenticated) return;
 
     const newActiveState = !isActive;
     setIsActive(newActiveState);
+    setIsOpen(false); // Auto-collapse panel immediately
     onToggleTranslation(newActiveState, targetLang);
   }, [isAuthenticated, isActive, targetLang, onToggleTranslation]);
 

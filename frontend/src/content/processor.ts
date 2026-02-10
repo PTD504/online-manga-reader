@@ -62,8 +62,13 @@ async function processSingleBubble(
 ): Promise<ProcessedBubble | null> {
     try {
         const croppedBlob = await cropFromBitmap(bitmap, box);
-        const translatedText = await translateBubble(croppedBlob, settings, sourceImageUrl);
-        return { box, translatedText };
+        const result = await translateBubble(croppedBlob, settings, sourceImageUrl);
+        return {
+            box,
+            translatedText: result.translated,
+            shouldRender: result.should_render,
+            cleanImage: result.clean_image,
+        };
     } catch (error) {
         console.error('[MangaTranslator] Failed to process bubble:', error);
         return null;
@@ -213,7 +218,11 @@ export class ImageProcessor {
 
             // Render translation overlays
             for (const bubble of processedBubbles) {
-                overlayManager.createBubble(bubble.box, bubble.translatedText);
+                if (!bubble.shouldRender) {
+                    console.log('[MangaTranslator] Skipping noise bubble:', bubble.translatedText.substring(0, 30));
+                    continue;
+                }
+                overlayManager.createBubble(bubble.box, bubble.translatedText, bubble.cleanImage);
                 console.log('[MangaTranslator] Rendered bubble:', bubble.translatedText.substring(0, 50) + '...');
             }
 

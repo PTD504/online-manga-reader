@@ -9,10 +9,9 @@ import { Session } from '@supabase/supabase-js';
 import { supabase, initAuthListener } from '../lib/supabase';
 
 /**
- * Settings interface
+ * Settings interface — Global settings only (no enable toggle)
  */
 interface Settings {
-    enabled: boolean;
     targetLang: string;
     backendUrl: string;
 }
@@ -47,7 +46,6 @@ const LANGUAGES = [
  * Default settings
  */
 const DEFAULT_SETTINGS: Settings = {
-    enabled: true,
     targetLang: 'Vietnamese',
     backendUrl: 'http://localhost:8000',
 };
@@ -108,13 +106,11 @@ function App() {
     const loadSettings = async (): Promise<void> => {
         try {
             const result = await chrome.storage.sync.get([
-                'enabled',
                 'targetLang',
                 'backendUrl',
             ]);
 
             setSettings({
-                enabled: result.enabled ?? DEFAULT_SETTINGS.enabled,
                 targetLang: result.targetLang ?? DEFAULT_SETTINGS.targetLang,
                 backendUrl: result.backendUrl ?? DEFAULT_SETTINGS.backendUrl,
             });
@@ -142,32 +138,6 @@ function App() {
     }, []);
 
     /**
-     * Toggle extension enabled state
-     * When enabling, automatically trigger page reprocessing
-     */
-    const handleToggleEnabled = useCallback(async (): Promise<void> => {
-        const newEnabled = !settings.enabled;
-        await saveSettings({ ...settings, enabled: newEnabled });
-
-        // Auto-trigger reprocess when enabling
-        if (newEnabled) {
-            try {
-                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-                if (tab?.id) {
-                    await chrome.tabs.sendMessage(tab.id, { type: 'REPROCESS_PAGE' });
-                    setStatus('Translation enabled! Processing page...');
-                    setTimeout(() => setStatus(''), 2000);
-                }
-            } catch {
-                // Ignore connection errors - content script may not be loaded on this page
-                console.log('[Popup] Content script not available on this page');
-                setStatus('Translation enabled!');
-                setTimeout(() => setStatus(''), 2000);
-            }
-        }
-    }, [settings, saveSettings]);
-
-    /**
      * Handle language change
      */
     const handleLanguageChange = useCallback(
@@ -193,25 +163,6 @@ function App() {
     const handleBackendUrlBlur = useCallback((): void => {
         saveSettings(settings);
     }, [settings, saveSettings]);
-
-    /**
-     * Reprocess current page
-     */
-    const handleReprocess = useCallback(async (): Promise<void> => {
-        try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (tab?.id) {
-                await chrome.tabs.sendMessage(tab.id, { type: 'REPROCESS_PAGE' });
-                setStatus('Page reprocessing...');
-                setTimeout(() => setStatus(''), 2000);
-            }
-        } catch {
-            // Ignore connection errors - content script may not be loaded on this page
-            console.log('[Popup] Content script not available on this page');
-            setStatus('Not available on this page');
-            setTimeout(() => setStatus(''), 2000);
-        }
-    }, []);
 
     /**
      * Open dashboard in new tab
@@ -281,19 +232,6 @@ function App() {
 
             {/* Main Content */}
             <main className="popup-content">
-                {/* Enable/Disable Toggle */}
-                <div className="setting-row">
-                    <label htmlFor="enabled-toggle">Enable Translation</label>
-                    <button
-                        id="enabled-toggle"
-                        className={`toggle-button ${settings.enabled ? 'active' : ''}`}
-                        onClick={handleToggleEnabled}
-                        aria-pressed={settings.enabled}
-                    >
-                        {settings.enabled ? 'ON' : 'OFF'}
-                    </button>
-                </div>
-
                 {/* Language Selection */}
                 <div className="setting-row">
                     <label htmlFor="language-select">Target Language</label>
@@ -301,7 +239,6 @@ function App() {
                         id="language-select"
                         value={settings.targetLang}
                         onChange={handleLanguageChange}
-                        disabled={!settings.enabled}
                     >
                         {LANGUAGES.map((lang) => (
                             <option key={lang.value} value={lang.value}>
@@ -321,19 +258,7 @@ function App() {
                         onChange={handleBackendUrlChange}
                         onBlur={handleBackendUrlBlur}
                         placeholder="http://localhost:8000"
-                        disabled={!settings.enabled}
                     />
-                </div>
-
-                {/* Action Buttons */}
-                <div className="action-buttons">
-                    <button
-                        className="action-button"
-                        onClick={handleReprocess}
-                        disabled={!settings.enabled}
-                    >
-                        Reprocess Page
-                    </button>
                 </div>
 
                 {/* Status Message */}

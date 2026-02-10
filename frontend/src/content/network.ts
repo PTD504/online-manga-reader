@@ -212,7 +212,7 @@ export async function translateBubble(
     croppedBlob: Blob,
     settings: Settings,
     sourceImageUrl?: string
-): Promise<string> {
+): Promise<TranslationResponse> {
     const croppedDataUrl = await blobToDataUrl(croppedBlob);
 
     const formDataParts = [
@@ -248,5 +248,5 @@ export async function translateBubble(
     }
 
     const data = response.data as TranslationResponse;
-    return data.translated;
+    return data;
 }
