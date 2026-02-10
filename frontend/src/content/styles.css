@@ -1,7 +1,8 @@
 /**
  * Manga Translator - Content Script Styles
  * 
- * Comic-style translation bubble overlay styling.
+ * Clean "White Box" overlay styling: solid white rounded boxes
+ * with centered black text and a subtle drop shadow.
  * Font is loaded via chrome.runtime.getURL for cross-origin injection.
  */
 
@@ -34,7 +35,7 @@
 }
 
 /* ============================================================================
-   Translation Bubble
+   Translation Bubble - Clean White Box Overlay
    ============================================================================ */
 
 .manga-translator-bubble {
@@ -42,22 +43,24 @@
   position: absolute;
   z-index: 9999;
   
-  /* Box styling */
+  /* Solid white background with rounded corners and drop shadow */
   background-color: rgba(255, 255, 255, 0.95);
-  border: 2px solid #333;
-  border-radius: 15px;
-  box-shadow: 
-    2px 2px 0 #333,
-    0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   
-  /* Text styling */
-  font-family: 'Bangers', 'Comic Sans MS', 'Chalkboard', cursive;
+  /* Text styling - black, centered, readable */
+  font-family: 'Bangers', 'Comic Sans MS', 'Segoe UI', sans-serif;
   font-size: 14px;
-  font-weight: 400;
+  font-weight: 700;
   line-height: 1.2;
-  color: #1a1a1a;
+  color: #111111;
   text-align: center;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
+  
+  /* No text stroke needed with solid background */
+  -webkit-text-stroke: 0;
+  paint-order: normal;
+  text-shadow: none;
   
   /* Flexbox centering */
   display: flex;
@@ -65,7 +68,7 @@
   justify-content: center;
   
   /* Padding and overflow */
-  padding: 4px 8px;
+  padding: 4px 6px;
   box-sizing: border-box;
   overflow: hidden;
   word-wrap: break-word;
@@ -86,20 +89,22 @@
 
 .manga-translator-bubble--small {
   font-size: 10px;
-  padding: 2px 4px;
-  border-width: 1px;
-  border-radius: 4px;
+  font-weight: 600;
+  padding: 2px 3px;
+  border-radius: 6px;
 }
 
 .manga-translator-bubble--medium {
   font-size: 14px;
-  padding: 4px 8px;
+  padding: 4px 6px;
 }
 
 .manga-translator-bubble--large {
   font-size: 18px;
-  padding: 8px 12px;
-  border-radius: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  border-radius: 10px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
 }
 
 /* ============================================================================
@@ -107,12 +112,9 @@
    ============================================================================ */
 
 .manga-translator-bubble:hover {
-  background-color: #fff;
-  transform: scale(1.02);
-  box-shadow: 
-    3px 3px 0 #333,
-    0 6px 16px rgba(0, 0, 0, 0.2);
-  transition: all 0.15s ease;
+  /* Subtle lift on hover */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: box-shadow 0.15s ease;
   cursor: pointer;
 }
 
@@ -139,14 +141,20 @@
    ============================================================================ */
 
 .manga-translator-bubble--loading {
+  /* Loading state keeps a subtle background so "..." is visible */
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(240, 240, 240, 0.95) 50%,
-    rgba(255, 255, 255, 0.95) 100%
+    rgba(255, 255, 255, 0.6) 0%,
+    rgba(240, 240, 240, 0.6) 50%,
+    rgba(255, 255, 255, 0.6) 100%
   );
+  border-radius: 8px;
   background-size: 200% 100%;
   animation: loading-shimmer 1.5s infinite;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+  color: #666;
+  font-weight: 400;
 }
 
 @keyframes loading-shimmer {
@@ -163,28 +171,21 @@
    ============================================================================ */
 
 .manga-translator-bubble--error {
-  background-color: rgba(255, 230, 230, 0.95);
-  border-color: #cc3333;
+  background-color: rgba(255, 230, 230, 0.8);
+  border: 1px solid #cc3333;
+  border-radius: 6px;
   color: #aa0000;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
 }
 
 /* ============================================================================
-   Dark Mode Support
+   Inpainted Bubble - DEPRECATED (kept for backward compat)
    ============================================================================ */
 
-@media (prefers-color-scheme: dark) {
-  .manga-translator-bubble {
-    background-color: rgba(40, 40, 40, 0.95);
-    border-color: #666;
-    color: #f0f0f0;
-    box-shadow: 
-      2px 2px 0 #666,
-      0 4px 12px rgba(0, 0, 0, 0.3);
-  }
-  
-  .manga-translator-bubble:hover {
-    background-color: rgba(50, 50, 50, 0.98);
-  }
+.manga-translator-bubble--inpainted {
+  /* No longer applied by overlay.ts */
+  all: unset;
 }
 
 /* ============================================================================
@@ -194,16 +195,13 @@
 @media (max-width: 768px) {
   .manga-translator-bubble {
     font-size: 12px;
-    padding: 3px 6px;
-    border-radius: 6px;
+    padding: 3px 4px;
   }
 }
 
 @media (max-width: 480px) {
   .manga-translator-bubble {
     font-size: 10px;
-    padding: 2px 4px;
-    border-radius: 4px;
-    border-width: 1px;
+    padding: 2px 3px;
   }
 }

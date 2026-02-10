@@ -72,9 +72,12 @@ export class OverlayManager {
     }
 
     /**
-     * Create a translation bubble at the specified bounding box
+     * Create a translation bubble at the specified bounding box.
+     * Renders as a clean white box overlay with readable centered text.
+     * The cleanImage parameter is accepted for API compat but ignored —
+     * we always use CSS-styled white boxes to avoid visual artifacts.
      */
-    createBubble(box: BoundingBox, translatedText: string): HTMLDivElement {
+    createBubble(box: BoundingBox, translatedText: string, _cleanImage?: string | null): HTMLDivElement {
         const wrapper = this.ensureWrapper();
         const { scaleX, scaleY } = this.getScaleFactors();
 
@@ -83,8 +86,7 @@ export class OverlayManager {
         const width = (box.x2 - box.x1) * scaleX;
         const height = (box.y2 - box.y1) * scaleY;
 
-        // Dynamic font sizing based on bubble height to prevent text clipping
-        // Heuristic: scale font between 10px and 18px based on bubble height
+        // Dynamic font sizing: scale between 10–18px based on bubble height
         const fontSize = Math.max(10, Math.min(height / 4, 18));
 
         const bubble = document.createElement('div');
@@ -92,6 +94,7 @@ export class OverlayManager {
         bubble.className = `manga-translator-bubble ${sizeClass}`;
         bubble.textContent = translatedText;
 
+        // Position & size the box to exactly match the detected bubble
         bubble.style.cssText = `
             position: absolute;
             left: ${left}px;
@@ -100,6 +103,9 @@ export class OverlayManager {
             height: ${height}px;
             font-size: ${fontSize}px;
         `;
+
+        // NOTE: cleanImage is intentionally ignored. We always render a
+        // solid white-box overlay styled purely via CSS.
 
         wrapper.appendChild(bubble);
         return bubble;
