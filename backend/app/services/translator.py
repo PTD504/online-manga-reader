@@ -72,17 +72,39 @@ class TranslatorService:
             return "image/gif"
         return "image/png"  # Default fallback
     
-    def _build_prompt(self, target_lang: str) -> str:
-        """Build the translation prompt."""
+    def _build_system_instruction(self, target_lang: str) -> str:
+        """Build the system instruction for professional manga translation."""
         return (
-            f"Extract text from this manga speech bubble and translate it to {target_lang}. "
-            f"Return valid JSON only: {{\"original\": \"<extracted text>\", \"translated\": \"<translated text>\"}}. "
-            f"If no text is found, return empty strings."
+            f"You are a professional Manga Translator translating from Japanese to {target_lang}.\n"
+            f"\n"
+            f"## Context & Tone Rules\n"
+            f"- Detect the tone and context from both the text content and visual cues in the image.\n"
+            f"- If the scene looks aggressive, action-oriented, or confrontational: use \"Tao/Mày\" (Vietnamese).\n"
+            f"- If the scene is a normal conversation or romance: use \"Tôi/Bạn\", \"Anh/Em\", or \"Cậu/Tớ\" as appropriate.\n"
+            f"- Since you only see one speech bubble, infer context from the text content and any visible visual cues.\n"
+            f"\n"
+            f"## Output Format\n"
+            f"- Return ONLY valid JSON with exactly two keys: \"original\" and \"translated\".\n"
+            f"- Example: {{\"original\": \"<extracted text>\", \"translated\": \"<translated text>\"}}\n"
+            f"- If no text is found, return: {{\"original\": \"\", \"translated\": \"\"}}\n"
+            f"- Do NOT include any explanations, notes, or markdown.\n"
+            f"\n"
+            f"## Style Rules\n"
+            f"- Keep translation concise to fit inside a speech bubble.\n"
+            f"- Use natural, spoken language (văn nói) — NOT machine translation tone.\n"
+            f"- Sound Effects (SFX): If detected, keep the original SFX or translate descriptively.\n"
+        )
+
+    def _build_prompt(self, target_lang: str) -> str:
+        """Build the user-facing prompt (short, since system instruction handles rules)."""
+        return (
+            f"Extract the text from this manga speech bubble and translate it to {target_lang}. "
+            f"Return the result as JSON."
         )
     
-    def _call_model(self, model: str, image_bytes: bytes, target_lang: str) -> dict:
+    async def _call_model(self, model: str, image_bytes: bytes, target_lang: str) -> dict:
         """
-        Call a specific Gemini model for translation.
+        Call a specific Gemini model for translation (async, non-blocking).
         
         Args:
             model: Model name to use.
@@ -94,6 +116,7 @@ class TranslatorService:
         """
         mime_type = self._detect_mime_type(image_bytes)
         prompt = self._build_prompt(target_lang)
+        system_instruction = self._build_system_instruction(target_lang)
         
         # Build content with image and prompt
         contents = [
@@ -101,18 +124,26 @@ class TranslatorService:
             prompt
         ]
         
-        logger.info(f"Calling {model}...")
+        # Configure generation with system instruction and native JSON output
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            response_mime_type="application/json",
+        )
         
-        response = self._client.models.generate_content(
+        logger.info(f"Calling {model} (async)...")
+        
+        # Use client.aio for native async — does NOT block the event loop
+        response = await self._client.aio.models.generate_content(
             model=model,
             contents=contents,
+            config=config,
         )
         
         if response and response.text:
-            # Parse JSON response
+            # Parse JSON response (native JSON mode ensures clean output)
             text = response.text.strip()
             
-            # Handle markdown code blocks if present
+            # Handle markdown code blocks if present (safety fallback)
             if text.startswith("```"):
                 lines = text.split("\n")
                 text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
@@ -146,7 +177,7 @@ class TranslatorService:
         
         # Step 1: Try primary model
         try:
-            return self._call_model(PRIMARY_MODEL, image_bytes, target_lang)
+            return await self._call_model(PRIMARY_MODEL, image_bytes, target_lang)
             
         except Exception as primary_error:
             error_str = str(primary_error).lower()
@@ -166,7 +197,7 @@ class TranslatorService:
             
             # Step 2: Try fallback model
             try:
-                return self._call_model(FALLBACK_MODEL, image_bytes, target_lang)
+                return await self._call_model(FALLBACK_MODEL, image_bytes, target_lang)
                 
             except Exception as fallback_error:
                 logger.error(f"Both models failed. Primary: {primary_error}, Fallback: {fallback_error}")
