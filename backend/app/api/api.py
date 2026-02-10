@@ -5,7 +5,10 @@ This module defines the REST API endpoints for the manga translation service.
 Uses sequential processing with model failover for optimal Time-to-First-Token.
 """
 
+import asyncio
+import base64
 import logging
+import re
 from enum import Enum
 from typing import Any
 
@@ -15,6 +18,7 @@ from pydantic import BaseModel
 from app.api.deps import get_current_user
 from app.services.translator import translate_image
 from app.services.credits import check_credits, deduct_credit, log_usage
+from app.services.inpainter import remove_text
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +50,16 @@ class TargetLanguage(str, Enum):
     UKRAINIAN = "Ukrainian"
 
 
+# Regex to detect noise: only symbols, punctuation, whitespace, or empty
+NOISE_PATTERN = re.compile(r'^[\W_]*$')
+
+
 class TranslationResponse(BaseModel):
     """Response model for translation endpoint."""
     original: str
     translated: str
+    should_render: bool = True
+    clean_image: str | None = None
 
 
 @router.post("/translate-bubble", response_model=TranslationResponse)
@@ -110,6 +120,28 @@ async def translate_bubble(
         # Translate using Gemini Vision with failover
         result = await translate_image(image_bytes, target_lang.value)
         
+        original_text = result.get("original", "")
+        translated_text = result.get("translated", "")
+        
+        # Smart filtering: detect noise (punctuation-only, empty, etc.)
+        should_render = not NOISE_PATTERN.match(original_text)
+        
+        # Inpainting: remove text from bubble image (only if worth rendering)
+        clean_image_b64: str | None = None
+        if should_render:
+            try:
+                # Run CPU-bound OpenCV in thread pool to keep async loop free
+                clean_bytes = await asyncio.to_thread(remove_text, image_bytes)
+                if clean_bytes:
+                    clean_image_b64 = base64.b64encode(clean_bytes).decode("ascii")
+                    logger.info("Inpainting successful")
+                else:
+                    logger.warning("Inpainting returned None, frontend will use fallback")
+            except Exception as inpaint_err:
+                logger.error(f"Inpainting error: {inpaint_err}")
+        else:
+            logger.info(f"Noise filtered out: '{original_text}'")
+        
         # Deduct credit and log usage after successful translation
         # Pass resource_id for idempotency (empty string -> None)
         resource_id = source_image_url.strip() if source_image_url else None
@@ -118,8 +150,10 @@ async def translate_bubble(
         
         logger.info(f"Translation complete -> {target_lang.value}, credit deducted")
         return TranslationResponse(
-            original=result.get("original", ""),
-            translated=result.get("translated", "")
+            original=original_text,
+            translated=translated_text,
+            should_render=should_render,
+            clean_image=clean_image_b64,
         )
         
     except HTTPException:
