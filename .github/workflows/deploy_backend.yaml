@@ -1,0 +1,71 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: asia-southeast1
+  REPO_NAME: manga-reader-repo
+  SERVICE_NAME: manga-reader-backend
+
+jobs:
+  deploy-backend:
+    name: Build & Deploy Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker Authentication
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Download Model from GCS
+        run: |
+          # Create models directory if it does not exist
+          mkdir -p backend/models
+          
+          # Copy the ONNX model from Google Cloud Storage to the local runner
+          gcloud storage cp gs://${{ secrets.GCS_BUCKET_NAME }}/models/best.onnx ./backend/models/best.onnx
+          
+          # Verify the file was downloaded successfully
+          ls -la backend/models/
+
+      - name: Build and Push Backend Image
+        run: |
+          IMAGE_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+          
+          # Build Docker image using the backend directory as context
+          docker build -t $IMAGE_PATH -f backend/Dockerfile ./backend
+          
+          # Push image to Artifact Registry
+          docker push $IMAGE_PATH
+
+      - name: Deploy Backend to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          region: ${{ env.REGION }}
+          timeout: '300s'
+          flags: |
+            --allow-unauthenticated 
+            --memory=2Gi 
+            --cpu=1
+          env_vars: |
+            GOOGLE_GEMINI_API_KEY=${{ secrets.GOOGLE_GEMINI_API_KEY }}
+            SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+            SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}

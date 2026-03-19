@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: manga_backend
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./backend/.env  # Point to the .env file in the backend directory (where api keys and supabase config are stored)
+    volumes:
+      # This allows the backend to access the models stored on the host machine, which is necessary for the manga processing functionality.
+      - ./models:/models
+    restart: unless-stopped
+
+  web-app:
+    build:
+      context: ./web-app
+      dockerfile: Dockerfile
+    container_name: manga_webapp
+    ports:
+      - "3000:3000"
+    environment:
+      # Declare the Backend URL for Frontend calls. Since web-app runs in the client's browser,
+      # it still needs to call localhost:8080, not the service name "backend".
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      - backend
+    restart: unless-stopped
