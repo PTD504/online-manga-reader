@@ -6,6 +6,7 @@ Includes Gemini Vision translation and YOLOv11 bubble detection.
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -75,7 +76,10 @@ app = FastAPI(
 # Configure CORS for browser extension access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        os.environ.get("FRONTEND_URL"),
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
