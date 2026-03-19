@@ -7,6 +7,7 @@
 
 import type {
     BoundingBox,
+    DetectedBubble,
     FetchImageResponse,
     ProxyApiResponse,
     DetectionApiResponse,
@@ -148,9 +149,9 @@ export async function proxyApiRequest(
 
 /**
  * Send image to detection API via background proxy.
- * Returns an array of bounding boxes, or empty array if detection fails.
+ * Returns detected bubble regions with optional polygon contours.
  */
-export async function detectBubbles(imageBlob: Blob, settings: Settings): Promise<BoundingBox[]> {
+export async function detectBubbles(imageBlob: Blob, settings: Settings): Promise<DetectedBubble[]> {
     const imageDataUrl = await blobToDataUrl(imageBlob);
 
     const formDataParts = [
@@ -174,7 +175,7 @@ export async function detectBubbles(imageBlob: Blob, settings: Settings): Promis
         return [];
     }
 
-    const boxes: BoundingBox[] = [];
+    const bubbles: DetectedBubble[] = [];
     for (const detection of detections) {
         if (!detection.box || !Array.isArray(detection.box) || detection.box.length !== 4) {
             console.warn('[MangaTranslator] Invalid detection box format:', detection);
@@ -194,11 +195,14 @@ export async function detectBubbles(imageBlob: Blob, settings: Settings): Promis
             continue;
         }
 
-        boxes.push({ x1, y1, x2, y2 });
+        const box: BoundingBox = { x1, y1, x2, y2 };
+        const polygon = Array.isArray(detection.polygon) ? detection.polygon : undefined;
+
+        bubbles.push({ box, polygon });
     }
 
-    console.log(`[MangaTranslator] Parsed ${boxes.length} valid boxes from ${detections.length} detections`);
-    return boxes;
+    console.log(`[MangaTranslator] Parsed ${bubbles.length} valid bubbles from ${detections.length} detections`);
+    return bubbles;
 }
 
 /**

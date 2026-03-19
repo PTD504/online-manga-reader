@@ -5,7 +5,7 @@
  * Implements parallel bubble processing for improved performance.
  */
 
-import type { BoundingBox, ProcessedBubble, Settings } from './types';
+import type { BoundingBox, DetectedBubble, ProcessedBubble, Settings } from './types';
 import { fetchImageViaBackground, detectBubbles, translateBubble, getAuthToken } from './network';
 import { OverlayManager } from './overlay';
 
@@ -56,15 +56,17 @@ export async function cropFromBitmap(bitmap: ImageBitmap, box: BoundingBox): Pro
  */
 async function processSingleBubble(
     bitmap: ImageBitmap,
-    box: BoundingBox,
+    detection: DetectedBubble,
     settings: Settings,
     sourceImageUrl?: string
 ): Promise<ProcessedBubble | null> {
     try {
+        const { box, polygon } = detection;
         const croppedBlob = await cropFromBitmap(bitmap, box);
         const result = await translateBubble(croppedBlob, settings, sourceImageUrl);
         return {
             box,
+            polygon,
             translatedText: result.translated,
             shouldRender: result.should_render,
             cleanImage: result.clean_image,
@@ -81,21 +83,21 @@ async function processSingleBubble(
  */
 export async function processBubblesInParallel(
     bitmap: ImageBitmap,
-    boxes: BoundingBox[],
+    detections: DetectedBubble[],
     settings: Settings,
     sourceImageUrl?: string
 ): Promise<ProcessedBubble[]> {
-    console.log(`[MangaTranslator] Processing ${boxes.length} bubbles in parallel...`);
+    console.log(`[MangaTranslator] Processing ${detections.length} bubbles in parallel...`);
 
     const startTime = performance.now();
 
-    const promises = boxes.map((box) => processSingleBubble(bitmap, box, settings, sourceImageUrl));
+    const promises = detections.map((detection) => processSingleBubble(bitmap, detection, settings, sourceImageUrl));
     const results = await Promise.all(promises);
 
     const successfulResults = results.filter((r): r is ProcessedBubble => r !== null);
 
     const elapsed = Math.round(performance.now() - startTime);
-    console.log(`[MangaTranslator] Parallel processing complete: ${successfulResults.length}/${boxes.length} bubbles in ${elapsed}ms`);
+    console.log(`[MangaTranslator] Parallel processing complete: ${successfulResults.length}/${detections.length} bubbles in ${elapsed}ms`);
 
     return successfulResults;
 }
@@ -199,32 +201,34 @@ export class ImageProcessor {
             }
 
             // Detect bubbles
-            const boxes = await detectBubbles(imageBlob, this.settings);
+            const detections = await detectBubbles(imageBlob, this.settings);
 
-            if (!boxes || boxes.length === 0) {
+            if (!detections || detections.length === 0) {
                 console.log('[MangaTranslator] No bubbles detected in image.');
                 this.imageStates.set(imageKey, 'completed');
                 bitmap.close();
                 return;
             }
 
-            console.log(`[MangaTranslator] Detected ${boxes.length} bubbles`);
+            console.log(`[MangaTranslator] Detected ${detections.length} bubbles`);
 
             // Create overlay manager
             const overlayManager = new OverlayManager(img, naturalWidth, naturalHeight);
 
             // Process all bubbles in parallel, passing original image URL for idempotency
-            const processedBubbles = await processBubblesInParallel(bitmap, boxes, this.settings, imageUrl);
+            const processedBubbles = await processBubblesInParallel(bitmap, detections, this.settings, imageUrl);
 
-            // Render translation overlays
-            for (const bubble of processedBubbles) {
+            // Render translation overlays in one canvas compositing pass
+            const bubblesToRender = processedBubbles.filter((bubble) => {
                 if (!bubble.shouldRender) {
                     console.log('[MangaTranslator] Skipping noise bubble:', bubble.translatedText.substring(0, 30));
-                    continue;
+                    return false;
                 }
-                overlayManager.createBubble(bubble.box, bubble.translatedText, bubble.cleanImage);
-                console.log('[MangaTranslator] Rendered bubble:', bubble.translatedText.substring(0, 50) + '...');
-            }
+                return true;
+            });
+
+            await overlayManager.renderBubbles(bubblesToRender);
+            console.log(`[MangaTranslator] Rendered ${bubblesToRender.length} bubbles to canvas overlay`);
 
             bitmap.close();
             this.imageStates.set(imageKey, 'completed');

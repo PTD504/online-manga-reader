@@ -50,8 +50,15 @@ export interface DetectionApiResponse {
         label: string;
         conf: number;
         box: number[];
+        polygon?: number[][];
     }>;
     count: number;
+}
+
+// Detection result consumed by frontend processing pipeline
+export interface DetectedBubble {
+    box: BoundingBox;
+    polygon?: number[][];
 }
 
 // Image processing status
@@ -63,4 +70,6 @@ export interface ProcessedBubble {
     translatedText: string;
     shouldRender: boolean;
     cleanImage?: string | null;
+    clean_image?: string | null;
+    polygon?: number[][];
 }

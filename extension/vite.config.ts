@@ -1,7 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { crx } from '@crxjs/vite-plugin';
-import manifest from './manifest.json';
+import { crx, defineManifest } from '@crxjs/vite-plugin';
+import manifestJson from './manifest.json';
+
+// Use defineManifest and type assertion to resolve the 'string' vs '"module"' conflict
+const manifest = defineManifest(manifestJson as any);
 
 export default defineConfig({
     plugins: [
@@ -9,11 +12,13 @@ export default defineConfig({
         crx({ manifest }),
     ],
     build: {
+        emptyOutDir: true,
         outDir: 'dist',
+        manifest: true,
         rollupOptions: {
+            // CRXJS handles most paths automatically from the manifest.
+            // We explicitly include the dashboard here as it is a custom page.
             input: {
-                popup: 'src/popup/index.html',
-                options: 'src/options/index.html',
                 dashboard: 'src/dashboard/index.html',
             },
         },

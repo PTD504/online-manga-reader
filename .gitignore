@@ -1,4 +1,4 @@
-# --- Python (FastAPI & OCR) ---
+# --- Python (FastAPI) ---
 __pycache__/
 *.py[cod]
 *$py.class
@@ -13,7 +13,6 @@ dist/
 .pytest_cache/
 
 # --- PaddleOCR & AI Models ---
-# Tránh đẩy các file model nặng lên Git
 inference/
 *.onnx
 *.pth
@@ -21,7 +20,7 @@ inference/
 *.pdiparams
 *.pdparams
 
-# --- Frontend (Vite & Chrome Extension) ---
+# --- Frontend (Vite, Next.js) ---
 node_modules/
 .DS_Store
 dist/
@@ -37,5 +36,6 @@ logs/
 Thumbs.db
 
 models/
+data/
 test/
 *.sql
