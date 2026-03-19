@@ -158,7 +158,7 @@ export async function detectBubbles(imageBlob: Blob, settings: Settings): Promis
         { name: 'file', data: imageDataUrl, filename: 'image.png' },
     ];
 
-    const response = await proxyApiRequest(`${settings.backendUrl}/detect`, formDataParts);
+    const response = await proxyApiRequest(`${settings.backendUrl}/api/v1/detect`, formDataParts);
 
     if (!response.success) {
         throw new Error(response.error || 'Detection API error');
@@ -225,7 +225,7 @@ export async function translateBubble(
         { name: 'source_image_url', data: sourceImageUrl || '' },
     ];
 
-    const response = await proxyApiRequest(`${settings.backendUrl}/translate-bubble`, formDataParts);
+    const response = await proxyApiRequest(`${settings.backendUrl}/api/v1/translate-bubble`, formDataParts);
 
     if (!response.success) {
         const status = response.status || 0;

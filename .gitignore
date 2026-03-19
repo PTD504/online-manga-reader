@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 .env
+.env.*
+!.env.example
 .venv
 env/
 venv/
@@ -38,4 +40,5 @@ Thumbs.db
 models/
 data/
 test/
-*.sql
+secrets/
+# *.sql
