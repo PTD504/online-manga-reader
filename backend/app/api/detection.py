@@ -5,7 +5,7 @@ This module defines the REST API endpoints for YOLOv11 bubble detection.
 """
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -31,6 +31,7 @@ class Detection(BaseModel):
     label: str
     conf: float
     box: List[int]  # [x1, y1, x2, y2]
+    polygon: Optional[List[List[int]]] = None  # [[x, y], ...]
 
 
 class DetectionResponse(BaseModel):

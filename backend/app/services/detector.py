@@ -1,9 +1,4 @@
-"""
-YOLOv11 Bubble Detection Service using ONNX Runtime.
-
-This module provides speech bubble detection for manga pages using a YOLOv11 model
-exported to ONNX format. Implements letterbox preprocessing and NMS postprocessing.
-"""
+"""YOLOv11 bubble detection service using ONNX Runtime."""
 
 import logging
 import os
@@ -13,6 +8,8 @@ from typing import List, Dict, Optional, Tuple
 import cv2
 import numpy as np
 import onnxruntime as ort
+
+from app.services.polygon import extract_bubble_polygon
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +23,7 @@ MODEL_PATH = Path(__file__).parent.parent.parent.parent / "models" / "best.onnx"
 
 
 class BubbleDetector:
-    """
-    Singleton YOLOv11 bubble detector using ONNX Runtime.
-    Detects speech bubbles in manga page images.
-    """
+    """Singleton YOLO bubble detector."""
     
     _instance: Optional["BubbleDetector"] = None
     _initialized: bool = False
@@ -38,13 +32,13 @@ class BubbleDetector:
     _output_name: str = ""
     
     def __new__(cls) -> "BubbleDetector":
-        """Ensure only one instance exists."""
+        """Return singleton instance."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
     def __init__(self) -> None:
-        """Initialize the ONNX Runtime session."""
+        """Initialize ONNX Runtime session."""
         if BubbleDetector._initialized:
             return
         
@@ -90,33 +84,21 @@ class BubbleDetector:
         logger.info("Bubble detector initialized successfully")
     
     def preprocess(self, image: np.ndarray) -> Tuple[np.ndarray, float, Tuple[float, float]]:
-        """
-        Preprocess image with letterbox resizing.
-        
-        Args:
-            image: Input image in BGR format (H, W, C).
-            
-        Returns:
-            Tuple of (input_tensor, ratio, (dw, dh)) where:
-            - input_tensor: Preprocessed tensor ready for inference (1, 3, 640, 640)
-            - ratio: Scaling ratio used
-            - (dw, dh): Padding added (width, height)
-        """
+        """Preprocess image with letterbox resizing."""
         original_h, original_w = image.shape[:2]
         
-        # Calculate scaling ratio to fit in INPUT_SIZE while maintaining aspect ratio
+        # Calculate scaling ratio while keeping aspect ratio.
         ratio = min(INPUT_SIZE / original_w, INPUT_SIZE / original_h)
         
-        # New dimensions after scaling
         new_w = int(original_w * ratio)
         new_h = int(original_h * ratio)
         
         # Resize image
         resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
         
-        # Calculate padding to reach INPUT_SIZE x INPUT_SIZE
-        dw = (INPUT_SIZE - new_w) / 2  # Width padding
-        dh = (INPUT_SIZE - new_h) / 2  # Height padding
+        # Calculate padding to reach INPUT_SIZE x INPUT_SIZE.
+        dw = (INPUT_SIZE - new_w) / 2
+        dh = (INPUT_SIZE - new_h) / 2
         
         # Apply padding (letterbox with gray color 114)
         top = int(round(dh - 0.1))
@@ -129,7 +111,7 @@ class BubbleDetector:
             cv2.BORDER_CONSTANT, value=(114, 114, 114)
         )
         
-        # Ensure exact size (handle rounding errors)
+        # Ensure exact size after rounding.
         if letterboxed.shape[0] != INPUT_SIZE or letterboxed.shape[1] != INPUT_SIZE:
             letterboxed = cv2.resize(letterboxed, (INPUT_SIZE, INPUT_SIZE))
         
@@ -155,41 +137,23 @@ class BubbleDetector:
         outputs: np.ndarray,
         ratio: float,
         dwdh: Tuple[float, float],
-        original_shape: Tuple[int, int]
+        original_shape: Tuple[int, int],
+        original_image: np.ndarray
     ) -> List[Dict]:
-        """
-        Postprocess YOLO outputs with NMS and coordinate rescaling.
-        
-        Args:
-            outputs: Raw model output, typically shape [1, 5, 8400] for YOLOv11
-            ratio: Scaling ratio from preprocessing
-            dwdh: Padding (dw, dh) from preprocessing
-            original_shape: Original image shape (height, width)
-            
-        Returns:
-            List of detections: [{'label': 'bubble', 'conf': float, 'box': [x1, y1, x2, y2]}]
-        """
+        """Postprocess YOLO outputs with NMS and coordinate rescaling."""
         dw, dh = dwdh
         original_h, original_w = original_shape
         
-        # Handle different output shapes
-        # YOLOv11 typically outputs [1, 5, 8400] where 5 = (x, y, w, h, conf)
-        # Or [1, 84, 8400] for 80 classes + 4 coords
-        predictions = outputs[0]  # Remove batch dimension
+        # Handle different output shapes.
+        predictions = outputs[0]
         
-        # If shape is (5, N), transpose to (N, 5)
         if predictions.shape[0] < predictions.shape[1]:
             predictions = predictions.T
         
-        # Now predictions should be (N, 5) where each row is [x, y, w, h, conf]
-        # For multi-class, it would be [x, y, w, h, class1_conf, class2_conf, ...]
-        
         if predictions.shape[1] == 5:
-            # Single class: [x, y, w, h, conf]
             boxes = predictions[:, :4]
             scores = predictions[:, 4]
         else:
-            # Multi-class: [x, y, w, h, class1_conf, ...]
             boxes = predictions[:, :4]
             class_scores = predictions[:, 4:]
             scores = np.max(class_scores, axis=1)
@@ -213,11 +177,9 @@ class BubbleDetector:
         x2 = x_center + width / 2
         y2 = y_center + height / 2
         
-        # Stack into (N, 4) array
         boxes_xyxy = np.stack([x1, y1, x2, y2], axis=1)
         
-        # Apply NMS using OpenCV
-        # cv2.dnn.NMSBoxes expects boxes in (x, y, w, h) format
+        # Apply NMS in (x, y, w, h) format.
         boxes_xywh = np.stack([x1, y1, width, height], axis=1).tolist()
         scores_list = scores.tolist()
         
@@ -231,65 +193,53 @@ class BubbleDetector:
         if len(indices) == 0:
             return []
         
-        # Flatten indices if needed (OpenCV version differences)
         if isinstance(indices, np.ndarray):
             indices = indices.flatten()
         else:
             indices = [i[0] if isinstance(i, (list, tuple)) else i for i in indices]
         
-        # Build final results with rescaled coordinates
         results = []
         for idx in indices:
-            # Get box in letterboxed coordinate space
             bx1, by1, bx2, by2 = boxes_xyxy[idx]
             conf = float(scores[idx])
             
-            # Rescale from letterboxed (640x640) to original image coordinates
-            # Step 1: Remove padding offset
             bx1 = bx1 - dw
             by1 = by1 - dh
             bx2 = bx2 - dw
             by2 = by2 - dh
             
-            # Step 2: Rescale by inverse ratio
             bx1 = bx1 / ratio
             by1 = by1 / ratio
             bx2 = bx2 / ratio
             by2 = by2 / ratio
             
-            # Step 3: Clip to original image bounds
             bx1 = max(0, min(bx1, original_w))
             by1 = max(0, min(by1, original_h))
             bx2 = max(0, min(bx2, original_w))
             by2 = max(0, min(by2, original_h))
             
-            # Step 4: Validate box has positive dimensions
             if bx2 <= bx1 or by2 <= by1:
                 logger.debug(f"Skipping invalid box with zero/negative dimensions: [{bx1}, {by1}, {bx2}, {by2}]")
                 continue
+
+            ix1, iy1, ix2, iy2 = int(bx1), int(by1), int(bx2), int(by2)
+            crop = original_image[iy1:iy2, ix1:ix2]
+            polygon = extract_bubble_polygon(crop, (ix1, iy1))
             
             results.append({
                 'label': 'bubble',
                 'conf': round(conf, 4),
-                'box': [int(bx1), int(by1), int(bx2), int(by2)]
+                'box': [ix1, iy1, ix2, iy2],
+                'polygon': polygon
             })
         
-        # Sort by confidence (highest first)
         results.sort(key=lambda x: x['conf'], reverse=True)
         
         logger.info(f"Detected {len(results)} bubbles")
         return results
     
     def detect(self, image_bytes: bytes) -> List[Dict]:
-        """
-        Detect speech bubbles in an image.
-        
-        Args:
-            image_bytes: Raw image bytes (PNG, JPG, etc.)
-            
-        Returns:
-            List of detections: [{'label': 'bubble', 'conf': float, 'box': [x1, y1, x2, y2]}]
-        """
+        """Detect speech bubbles in an image."""
         # Decode image bytes to numpy array
         nparr = np.frombuffer(image_bytes, np.uint8)
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -311,7 +261,7 @@ class BubbleDetector:
         )[0]
         
         # Postprocess
-        results = self.postprocess(outputs, ratio, dwdh, original_shape)
+        results = self.postprocess(outputs, ratio, dwdh, original_shape, image)
         
         return results
 
