@@ -22,10 +22,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the built wheels from the builder stage and install them
 COPY --from=builder /app/wheels /wheels
 COPY requirements.txt .
-RUN pip install --no-cache /wheels/*
+RUN pip install --no-cache-dir /wheels/*
 
 # Copy source code of the backend
 COPY app/ ./app/
+COPY models/ ./models/
 
 # Expose port of FastAPI
 EXPOSE 8080
