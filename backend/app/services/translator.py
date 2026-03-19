@@ -45,10 +45,10 @@ class TranslatorService:
         if TranslatorService._initialized:
             return
         
-        api_key = os.environ.get("GOOGLE_API_KEY")
+        api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise ValueError(
-                "GOOGLE_API_KEY environment variable is not set. "
+                "GEMINI_API_KEY environment variable is not set. "
                 "Please set it in your .env file."
             )
         

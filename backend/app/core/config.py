@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = ""
 
     # Gemini API (existing)
-    GOOGLE_GEMINI_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
