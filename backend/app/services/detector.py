@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 
-from app.services.polygon import extract_bubble_polygon
+from app.utils.polygon import extract_bubble_polygon
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ IOU_THRESHOLD = 0.45
 INPUT_SIZE = 640
 
 # Model path (relative to backend directory)
-MODEL_PATH = Path(__file__).parent.parent.parent.parent / "models" / "best.onnx"
+MODEL_PATH = Path(__file__).parent.parent.parent / "models" / "best.onnx"
 
 
 class BubbleDetector:

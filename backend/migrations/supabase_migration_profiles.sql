@@ -99,10 +99,3 @@ CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW
     EXECUTE FUNCTION handle_new_user();
-
--- ============================================================================
--- Verification Queries (Run after migration to verify)
--- ============================================================================
--- SELECT * FROM profiles;
--- SELECT * FROM usage_logs;
--- SELECT * FROM pg_trigger WHERE tgname = 'on_auth_user_created';

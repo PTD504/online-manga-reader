@@ -9,16 +9,16 @@ import asyncio
 import base64
 import logging
 import re
-from enum import Enum
-from typing import Any
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
-from pydantic import BaseModel
 
 from app.api.deps import get_current_user
-from app.services.translator import translate_image
+from app.schemas.translation import TargetLanguage, TranslationResponse
 from app.services.credits import check_credits, deduct_credit, log_usage
 from app.services.inpainter import remove_text
+from app.services.orchestrator import process_full_page
+from app.services.translator import translate_image
 
 logger = logging.getLogger(__name__)
 
@@ -26,40 +26,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Translation"])
 
 
-class TargetLanguage(str, Enum):
-    """Supported target languages for translation."""
-    VIETNAMESE = "Vietnamese"
-    ENGLISH = "English"
-    JAPANESE = "Japanese"
-    KOREAN = "Korean"
-    CHINESE_SIMPLIFIED = "Chinese (Simplified)"
-    CHINESE_TRADITIONAL = "Chinese (Traditional)"
-    SPANISH = "Spanish"
-    FRENCH = "French"
-    PORTUGUESE = "Portuguese"
-    INDONESIAN = "Indonesian"
-    THAI = "Thai"
-    RUSSIAN = "Russian"
-    GERMAN = "German"
-    ITALIAN = "Italian"
-    ARABIC = "Arabic"
-    HINDI = "Hindi"
-    FILIPINO = "Filipino"
-    POLISH = "Polish"
-    TURKISH = "Turkish"
-    UKRAINIAN = "Ukrainian"
-
-
 # Regex to detect noise: only symbols, punctuation, whitespace, or empty
 NOISE_PATTERN = re.compile(r'^[\W_]*$')
-
-
-class TranslationResponse(BaseModel):
-    """Response model for translation endpoint."""
-    original: str
-    translated: str
-    should_render: bool = True
-    clean_image: str | None = None
 
 
 @router.post("/translate-bubble", response_model=TranslationResponse)
@@ -163,4 +131,56 @@ async def translate_bubble(
         raise HTTPException(
             status_code=500,
             detail=f"Translation failed: {str(e)}"
+        )
+
+
+@router.post("/translate-page")
+async def translate_page_endpoint(
+    file: UploadFile = File(...),
+    target_lang: str = "Vietnamese"
+) -> List[Dict[str, Any]]:
+    """
+    Detect and translate all bubbles in a manga page image.
+
+    Pipeline:
+    1. Detect bubbles via YOLO detector.
+    2. Decode full image with OpenCV.
+    3. Crop each bubble region by [x1, y1, x2, y2].
+    4. Run inpainting and translation for each crop.
+    5. Return enriched bubble list with clean_image and translatedText.
+    """
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Please upload an image file."
+        )
+
+    try:
+        image_bytes = await file.read()
+        if not image_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Empty file received."
+            )
+
+        return await process_full_page(image_bytes, target_lang)
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+    except FileNotFoundError as e:
+        logger.error(f"Model file not found: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error in translate-page: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Translate-page failed: {str(e)}"
         )

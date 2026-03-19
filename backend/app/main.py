@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.api import router as translation_router
-from app.api.detection import router as detection_router
+from app.api.v1.api_router import api_router
+from app.core.constants import API_V1_PREFIX
 from app.services.translator import get_translator
 from app.services.detector import get_detector
 
@@ -82,8 +82,7 @@ app.add_middleware(
 )
 
 # Include API routers
-app.include_router(translation_router)
-app.include_router(detection_router)
+app.include_router(api_router, prefix=API_V1_PREFIX)
 
 
 @app.get("/")

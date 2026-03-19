@@ -5,39 +5,16 @@ This module defines the REST API endpoints for YOLOv11 bubble detection.
 """
 
 import logging
-from typing import List, Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from pydantic import BaseModel
 
+from app.schemas.detection import Detection, DetectionResponse
 from app.services.detector import detect_bubbles
 
 logger = logging.getLogger(__name__)
 
 # Create API router
 router = APIRouter(tags=["Detection"])
-
-
-class BoundingBox(BaseModel):
-    """Bounding box coordinates."""
-    x1: int
-    y1: int
-    x2: int
-    y2: int
-
-
-class Detection(BaseModel):
-    """Single detection result."""
-    label: str
-    conf: float
-    box: List[int]  # [x1, y1, x2, y2]
-    polygon: Optional[List[List[int]]] = None  # [[x, y], ...]
-
-
-class DetectionResponse(BaseModel):
-    """Response model for detection endpoint."""
-    detections: List[Detection]
-    count: int
 
 
 @router.post("/detect", response_model=DetectionResponse)
