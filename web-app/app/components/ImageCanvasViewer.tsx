@@ -98,7 +98,9 @@ export default function ImageCanvasViewer({
           </div>
         ) : (
           <div className="flex min-h-[280px] items-center justify-center">
-            <p className="text-sm text-neutral-500">Upload an image to start the workspace preview.</p>
+            <p className="text-sm text-neutral-500">
+              <span className="font-bold text-red-500">Paste (Ctrl + V)</span> your image here.
+            </p>
           </div>
         )}
       </div>

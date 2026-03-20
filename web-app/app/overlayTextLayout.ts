@@ -43,8 +43,10 @@ export const drawWrappedText = (
   if (!trimmed) return;
 
   const { left, top, width, height } = box;
-  const maxFontSize = 26;
-  const minFontSize = 10;
+  
+  // Calculate dynamic font sizes based on bubble dimensions
+  const maxFontSize = Math.max(36, Math.floor(Math.min(width, height) / 2));
+  const minFontSize = 4;
   const lineHeightRatio = 1.25;
   const padding = Math.max(4, Math.round(Math.min(width, height) * 0.08));
 
@@ -114,8 +116,10 @@ export const drawWrappedText = (
             break;
           }
 
+          // Force perfect center positioning within the available visual segment 
+          // to prevent horizontal clipping.
           lineSlots.push({
-            centerX: Math.max(lineMinX, Math.min(lineMaxX, geometry.anchor.x)),
+            centerX: lineMinX + maxWidth / 2,
             yTop,
             maxWidth,
           });
@@ -124,58 +128,43 @@ export const drawWrappedText = (
         if (slotInvalid) continue;
 
         const lines: string[] = [];
-        const queue = [...words];
         let lineIndex = 0;
         let currentLine = "";
         let failed = false;
 
-        while (queue.length > 0) {
-          const word = queue.shift();
-          if (!word) continue;
-
+        for (let j = 0; j < words.length; j += 1) {
+          const word = words[j];
           const slot = lineSlots[lineIndex];
+
           if (!slot) {
             failed = true;
             break;
           }
 
           const candidate = currentLine ? `${currentLine} ${word}` : word;
+
           if (ctx.measureText(candidate).width <= slot.maxWidth) {
             currentLine = candidate;
-            continue;
-          }
+          } else {
+            if (currentLine) {
+              lines.push(currentLine);
+              currentLine = word;
+              lineIndex += 1;
 
-          if (currentLine) {
-            lines.push(currentLine);
-            currentLine = "";
-            lineIndex += 1;
-            if (lineIndex >= lineCount) {
+              if (lineIndex >= lineCount) {
+                failed = true;
+                break;
+              }
+
+              const nextSlot = lineSlots[lineIndex];
+              if (ctx.measureText(word).width > nextSlot.maxWidth) {
+                failed = true;
+                break;
+              }
+            } else {
               failed = true;
               break;
             }
-            queue.unshift(word);
-            continue;
-          }
-
-          const prefixLength = getPrefixFitLength(ctx, word, slot.maxWidth);
-          if (prefixLength <= 0) {
-            failed = true;
-            break;
-          }
-
-          const part = word.slice(0, prefixLength);
-          const rest = word.slice(prefixLength);
-          lines.push(part);
-          lineIndex += 1;
-          if (lineIndex >= lineCount) {
-            if (rest.length > 0 || queue.length > 0) {
-              failed = true;
-            }
-            break;
-          }
-
-          if (rest.length > 0) {
-            queue.unshift(rest);
           }
         }
 
@@ -224,15 +213,16 @@ export const drawWrappedText = (
     break;
   }
 
+  // Fallback if even minFontSize fails
   if (!finalLayout) {
     ctx.font = `${minFontSize}px sans-serif`;
     const lineHeight = Math.round(minFontSize * lineHeightRatio);
-    const maxLines = Math.max(1, Math.floor((maxInnerY - minInnerY) / lineHeight));
     const fallbackWidth = Math.max(1, width - padding * 2);
     const lines: string[] = [];
     let rest = trimmed;
 
-    while (rest.length > 0 && lines.length < maxLines) {
+    // Remove maxLines limitation so we never drop remaining text
+    while (rest.length > 0) {
       const fitLength = getPrefixFitLength(ctx, rest, fallbackWidth);
       if (fitLength <= 0) break;
 
@@ -249,10 +239,11 @@ export const drawWrappedText = (
     }
 
     const blockHeight = lines.length * lineHeight;
-    const startY = Math.max(minInnerY, Math.min(maxInnerY - blockHeight, geometry.anchor.y - blockHeight / 2));
+    const startY = geometry.anchor.y - blockHeight / 2;
     finalLayout = lines.map((line, idx) => ({
       text: line,
-      centerX: geometry.anchor.x,
+      // Fallback alignment based on geometry type
+      centerX: polygon && polygon.length >= 3 ? geometry.anchor.x : left + width / 2,
       yTop: startY + idx * lineHeight,
       maxWidth: fallbackWidth,
     }));

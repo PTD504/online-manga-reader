@@ -5,25 +5,14 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export async function translatePageAPI(file: File, targetLanguage: string): Promise<Bubble[]> {
   const translateUrl = `${BASE_URL}/api/v1/translate-page?target_lang=${encodeURIComponent(targetLanguage)}`;
 
-  const arrayBuffer = await file.arrayBuffer();
-  let response = await fetch(translateUrl, {
+  // const arrayBuffer = await file.arrayBuffer();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(translateUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": file.type,
-    },
-    body: arrayBuffer,
+    body: formData,
   });
-
-  // Fallback for FastAPI endpoints expecting multipart UploadFile("file").
-  if ([400, 415, 422].includes(response.status)) {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    response = await fetch(translateUrl, {
-      method: "POST",
-      body: formData,
-    });
-  }
 
   if (!response.ok) {
     throw new Error("Translate request failed with status " + response.status);

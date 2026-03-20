@@ -103,8 +103,9 @@ export const getInteriorAnchor = (polygon: PolygonPoint[], centroid: { x: number
   let best = { x: centroid.x, y: centroid.y };
   let bestScore = -Infinity;
 
-  for (let i = 0; i <= 24; i += 1) {
-    const t = i / 24;
+  const SAMPLES = 60;
+  for (let i = 0; i <= SAMPLES; i += 1) {
+    const t = i / SAMPLES;
     const y = minY + (maxY - minY) * t;
     const segment = getBestSegmentAtY(polygon, y, centroid.x);
     if (!segment) continue;
