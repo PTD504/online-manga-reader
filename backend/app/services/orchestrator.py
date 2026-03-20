@@ -14,7 +14,8 @@ import numpy as np
 
 from app.services.detector import detect_bubbles
 from app.services.inpainter import remove_text
-from app.services.translator import translate_image
+from app.services.ocr import extract_text_from_image
+from app.services.translator import translate_batch
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,15 @@ async def process_full_page(image_bytes: bytes, target_lang: str) -> List[Dict[s
     if not detections:
         return []
 
+    # Sort bubbles in reading order: top-to-bottom, then left-to-right.
+    detections = sorted(
+        detections,
+        key=lambda item: (
+            int(item.get("box", [0, 0, 0, 0])[1]) if isinstance(item.get("box"), list) and len(item.get("box")) == 4 else 0,
+            int(item.get("box", [0, 0, 0, 0])[0]) if isinstance(item.get("box"), list) and len(item.get("box")) == 4 else 0,
+        ),
+    )
+
     # Decode original page once for per-bubble cropping.
     img_array = np.frombuffer(image_bytes, dtype=np.uint8)
     page_image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
@@ -58,13 +68,12 @@ async def process_full_page(image_bytes: bytes, target_lang: str) -> List[Dict[s
 
     page_height, page_width = page_image.shape[:2]
 
-    # Limit in-flight translation requests to keep API latency stable.
-    semaphore = asyncio.Semaphore(4)
-
-    async def process_bubble(bubble: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_bubble(index: int, bubble: Dict[str, Any]) -> Dict[str, Any]:
         enriched = dict(bubble)
+        enriched["index"] = index
         enriched["clean_image"] = None
         enriched["translatedText"] = ""
+        enriched["ocr_text"] = ""
 
         box = bubble.get("box")
         if not isinstance(box, list):
@@ -86,26 +95,43 @@ async def process_full_page(image_bytes: bytes, target_lang: str) -> List[Dict[s
 
         crop_bytes = encoded.tobytes()
 
-        async with semaphore:
-            translation_task = translate_image(crop_bytes, target_lang)
-            inpaint_task = asyncio.to_thread(remove_text, crop_bytes)
-            translation_result, clean_bytes = await asyncio.gather(
-                translation_task,
-                inpaint_task,
-            )
+        # Run OCR and inpainting concurrently for each bubble crop.
+        ocr_result, clean_bytes = await asyncio.gather(
+            extract_text_from_image(crop_bytes),
+            asyncio.to_thread(remove_text, crop_bytes),
+        )
 
-        if isinstance(translation_result, dict):
-            translated = translation_result.get("translated", "")
-            if isinstance(translated, str):
-                enriched["translatedText"] = translated
+        if isinstance(ocr_result, dict):
+            text_value = ocr_result.get("text", "")
+            if isinstance(text_value, str):
+                enriched["ocr_text"] = text_value.strip()
 
         if clean_bytes:
             enriched["clean_image"] = base64.b64encode(clean_bytes).decode("ascii")
 
         return enriched
 
-    tasks = [process_bubble(bubble) for bubble in detections]
+    tasks = [process_bubble(index, bubble) for index, bubble in enumerate(detections)]
     enriched_bubbles = await asyncio.gather(*tasks)
+
+    batch_payload: dict[str, str] = {}
+    for bubble in enriched_bubbles:
+        ocr_text = bubble.get("ocr_text", "")
+        index = bubble.get("index")
+        if isinstance(index, int) and isinstance(ocr_text, str) and ocr_text.strip():
+            batch_payload[str(index)] = ocr_text.strip()
+
+    translated_map: dict[str, str] = {}
+    if batch_payload:
+        translated_map = await translate_batch(batch_payload, target_lang)
+
+    for bubble in enriched_bubbles:
+        index = bubble.get("index")
+        key = str(index) if isinstance(index, int) else ""
+        translated = translated_map.get(key, "")
+        bubble["translatedText"] = translated if isinstance(translated, str) else ""
+        bubble.pop("ocr_text", None)
+        bubble.pop("index", None)
 
     logger.info(f"Translate-page complete: {len(enriched_bubbles)} bubbles processed")
     return enriched_bubbles

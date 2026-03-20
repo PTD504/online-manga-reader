@@ -1,7 +1,7 @@
 """
 Gemini Translation Service with Model Failover.
 
-This module handles OCR and translation using Gemini Vision models.
+This module handles text translation using Gemini models.
 Implements failover from primary to fallback model on rate limit errors.
 """
 
@@ -26,7 +26,7 @@ FALLBACK_MODEL = "gemini-2.0-flash"
 
 class TranslatorService:
     """
-    Singleton Translation service using Google Gemini Vision API.
+    Singleton Translation service using Google Gemini API.
     Implements failover mechanism for rate limit handling.
     """
     
@@ -59,71 +59,54 @@ class TranslatorService:
         
         TranslatorService._initialized = True
         logger.info(f"Gemini API client initialized. Primary: {PRIMARY_MODEL}, Fallback: {FALLBACK_MODEL}")
-    
-    def _detect_mime_type(self, image_bytes: bytes) -> str:
-        """Detect image MIME type from bytes."""
-        if image_bytes[:2] == b'\xff\xd8':
-            return "image/jpeg"
-        elif image_bytes[:4] == b'\x89PNG':
-            return "image/png"
-        elif image_bytes[:4] == b'RIFF' and len(image_bytes) > 12 and image_bytes[8:12] == b'WEBP':
-            return "image/webp"
-        elif image_bytes[:3] == b'GIF':
-            return "image/gif"
-        return "image/png"  # Default fallback
-    
-    def _build_system_instruction(self, target_lang: str) -> str:
-        """Build the system instruction for professional manga translation."""
+
+    def _build_single_system_instruction(self, target_lang: str) -> str:
+        """Build system instruction for single text translation."""
         return (
             f"You are a professional Manga Translator translating from Japanese to {target_lang}.\n"
             f"\n"
-            f"## Context & Tone Rules\n"
-            f"- Detect the tone and context from both the text content and visual cues in the image.\n"
-            f"- If the scene looks aggressive, action-oriented, or confrontational: use \"Tao/Mày\" (Vietnamese).\n"
-            f"- If the scene is a normal conversation or romance: use \"Tôi/Bạn\", \"Anh/Em\", or \"Cậu/Tớ\" as appropriate.\n"
-            f"- Since you only see one speech bubble, infer context from the text content and any visible visual cues.\n"
+            f"## Translation Rules\n"
+            f"- Keep translation concise to fit inside a speech bubble.\n"
+            f"- Use natural, spoken language (van noi) and avoid literal machine-like wording.\n"
+            f"- OCR text may contain concatenated English words without spaces due to recognition limitations.\n"
+            f"- If concatenated words are detected, split and normalize them before translating to preserve meaning.\n"
             f"\n"
             f"## Output Format\n"
             f"- Return ONLY valid JSON with exactly two keys: \"original\" and \"translated\".\n"
-            f"- Example: {{\"original\": \"<extracted text>\", \"translated\": \"<translated text>\"}}\n"
-            f"- If no text is found, return: {{\"original\": \"\", \"translated\": \"\"}}\n"
-            f"- Do NOT include any explanations, notes, or markdown.\n"
-            f"\n"
-            f"## Style Rules\n"
-            f"- Keep translation concise to fit inside a speech bubble.\n"
-            f"- Use natural, spoken language (văn nói) — NOT machine translation tone.\n"
-            f"- Sound Effects (SFX): If detected, keep the original SFX or translate descriptively.\n"
+            f"- Example: {{\"original\": \"<source text>\", \"translated\": \"<target text>\"}}\n"
+            f"- Do NOT include explanations, markdown, or code fences.\n"
         )
 
-    def _build_prompt(self, target_lang: str) -> str:
-        """Build the user-facing prompt (short, since system instruction handles rules)."""
+    def _build_batch_system_instruction(self, target_lang: str) -> str:
+        """Build system instruction for batched text translation."""
         return (
-            f"Extract the text from this manga speech bubble and translate it to {target_lang}. "
-            f"Return the result as JSON."
+            f"You are a professional Manga Translator translating from Japanese to {target_lang}.\n"
+            f"\n"
+            f"## Translation Rules\n"
+            f"- Translate each input text value independently.\n"
+            f"- OCR text may contain concatenated English words without spaces due to recognition limitations.\n"
+            f"- If concatenated words are detected, split and normalize them before translating to preserve meaning.\n"
+            f"- Keep translated lines concise and natural for manga speech bubbles.\n"
+            f"\n"
+            f"## Output Contract\n"
+            f"- Return ONLY a raw JSON object with exactly the same keys as input.\n"
+            f"- Each output value must be a translated string for its corresponding input key.\n"
+            f"- Do NOT add, remove, rename, or reorder keys.\n"
+            f"- Do NOT include explanations, markdown, or code fences.\n"
         )
-    
-    async def _call_model(self, model: str, image_bytes: bytes, target_lang: str) -> dict:
+
+    async def _call_model(self, model: str, prompt: str, system_instruction: str) -> dict:
         """
         Call a specific Gemini model for translation (async, non-blocking).
         
         Args:
             model: Model name to use.
-            image_bytes: Image data.
-            target_lang: Target language for translation.
+            prompt: User prompt content.
+            system_instruction: System instructions for model behavior.
             
         Returns:
-            Dict with 'original' and 'translated' keys.
+            Parsed JSON object from model response.
         """
-        mime_type = self._detect_mime_type(image_bytes)
-        prompt = self._build_prompt(target_lang)
-        system_instruction = self._build_system_instruction(target_lang)
-        
-        # Build content with image and prompt
-        contents = [
-            types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-            prompt
-        ]
-        
         # Configure generation with system instruction and native JSON output
         config = types.GenerateContentConfig(
             system_instruction=system_instruction,
@@ -135,7 +118,7 @@ class TranslatorService:
         # Use client.aio for native async — does NOT block the event loop
         response = await self._client.aio.models.generate_content(
             model=model,
-            contents=contents,
+            contents=prompt,
             config=config,
         )
         
@@ -149,59 +132,108 @@ class TranslatorService:
                 text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
             
             result = json.loads(text)
-            logger.info(f"Success with {model}: {result.get('original', '')[:30]}...")
+            logger.info(f"Success with {model}")
             return result
-        
-        return {"original": "", "translated": ""}
-    
-    async def translate_image(
-        self,
-        image_bytes: bytes,
-        target_lang: str = "Vietnamese"
-    ) -> dict:
-        """
-        Translate text from a manga speech bubble image.
-        
-        Uses PRIMARY_MODEL first, falls back to FALLBACK_MODEL on rate limit errors.
-        
-        Args:
-            image_bytes: Image data (PNG, JPG, WEBP, etc.)
-            target_lang: Target language for translation.
-            
-        Returns:
-            Dict with 'original' and 'translated' keys.
-        """
-        if not image_bytes:
-            logger.warning("Empty image bytes provided")
-            return {"original": "", "translated": ""}
-        
-        # Step 1: Try primary model
+        raise ValueError("Model returned empty response.")
+
+    async def _translate_with_failover(self, prompt: str, system_instruction: str) -> dict:
+        """Translate with primary model and fallback on rate-limit or transient failures."""
         try:
-            return await self._call_model(PRIMARY_MODEL, image_bytes, target_lang)
-            
+            return await self._call_model(PRIMARY_MODEL, prompt, system_instruction)
         except Exception as primary_error:
             error_str = str(primary_error).lower()
-            
-            # Check if it's a rate limit error (ResourceExhausted / 429)
             is_rate_limit = (
                 "resourceexhausted" in error_str or
                 "429" in error_str or
                 "rate" in error_str or
                 "quota" in error_str
             )
-            
+
             if is_rate_limit:
                 logger.warning(f"Rate limit on {PRIMARY_MODEL}, falling back to {FALLBACK_MODEL}")
             else:
                 logger.warning(f"Error with {PRIMARY_MODEL}: {primary_error}, trying {FALLBACK_MODEL}")
+
+            return await self._call_model(FALLBACK_MODEL, prompt, system_instruction)
+    
+    async def translate_text(
+        self,
+        text: str,
+        target_lang: str = "Vietnamese"
+    ) -> dict:
+        """
+        Translate a single OCR text string.
+        
+        Args:
+            text: OCR text to translate.
+            target_lang: Target language for translation.
             
-            # Step 2: Try fallback model
-            try:
-                return await self._call_model(FALLBACK_MODEL, image_bytes, target_lang)
-                
-            except Exception as fallback_error:
-                logger.error(f"Both models failed. Primary: {primary_error}, Fallback: {fallback_error}")
-                return {"original": "", "translated": ""}
+        Returns:
+            Dict with 'original' and 'translated' keys.
+        """
+        source_text = text.strip()
+        if not source_text:
+            return {"original": "", "translated": ""}
+
+        system_instruction = self._build_single_system_instruction(target_lang)
+        prompt = (
+            "Translate the following OCR text to the target language and return JSON only.\n"
+            f"source_text={json.dumps(source_text, ensure_ascii=False)}"
+        )
+
+        try:
+            result = await self._translate_with_failover(prompt, system_instruction)
+        except Exception as error:
+            logger.error(f"Translation failed for single text: {error}")
+            return {"original": source_text, "translated": ""}
+
+        translated = result.get("translated", "") if isinstance(result, dict) else ""
+        if not isinstance(translated, str):
+            translated = str(translated)
+        return {"original": source_text, "translated": translated}
+
+    async def translate_batch(self, texts: dict[str, str], target_lang: str = "Vietnamese") -> dict[str, str]:
+        """
+        Translate a batch of OCR text values with one LLM call.
+
+        Args:
+            texts: Dictionary mapping bubble id/index to OCR text.
+            target_lang: Target language for translation.
+
+        Returns:
+            Dictionary of translated texts with the exact same keys.
+        """
+        if not texts:
+            return {}
+
+        sanitized: dict[str, str] = {}
+        for key, value in texts.items():
+            key_str = str(key)
+            value_str = value if isinstance(value, str) else str(value)
+            sanitized[key_str] = value_str
+
+        system_instruction = self._build_batch_system_instruction(target_lang)
+        payload = json.dumps(sanitized, ensure_ascii=False)
+        prompt = (
+            "Translate all JSON values to the target language and preserve keys exactly. "
+            "Return raw JSON only.\n"
+            f"input_json={payload}"
+        )
+
+        try:
+            result = await self._translate_with_failover(prompt, system_instruction)
+        except Exception as error:
+            logger.error(f"Batch translation failed: {error}")
+            return {key: "" for key in sanitized.keys()}
+
+        if not isinstance(result, dict):
+            return {key: "" for key in sanitized.keys()}
+
+        translated_map: dict[str, str] = {}
+        for key in sanitized.keys():
+            value = result.get(key, "")
+            translated_map[key] = value if isinstance(value, str) else str(value)
+        return translated_map
 
 
 # Module-level singleton
@@ -216,10 +248,27 @@ def get_translator() -> TranslatorService:
     return _translator
 
 
-async def translate_image(
-    image_bytes: bytes,
+async def translate_text(
+    text: str,
     target_lang: str = "Vietnamese"
 ) -> dict:
-    """Convenience function to translate a single image."""
+    """Convenience function to translate a single text string."""
     translator = get_translator()
-    return await translator.translate_image(image_bytes, target_lang)
+    return await translator.translate_text(text, target_lang)
+
+
+async def translate_image(
+    text: str,
+    target_lang: str = "Vietnamese"
+) -> dict:
+    """Backward-compatible alias for single text translation."""
+    return await translate_text(text, target_lang)
+
+
+async def translate_batch(
+    texts: dict[str, str],
+    target_lang: str = "Vietnamese"
+) -> dict[str, str]:
+    """Convenience function to translate a text batch."""
+    translator = get_translator()
+    return await translator.translate_batch(texts, target_lang)

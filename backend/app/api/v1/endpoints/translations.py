@@ -17,8 +17,9 @@ from app.api.deps import get_current_user
 from app.schemas.translation import TargetLanguage, TranslationResponse
 from app.services.credits import check_credits, deduct_credit, log_usage
 from app.services.inpainter import remove_text
+from app.services.ocr import extract_text_from_image
 from app.services.orchestrator import process_full_page
-from app.services.translator import translate_image
+from app.services.translator import translate_text
 
 logger = logging.getLogger(__name__)
 
@@ -85,30 +86,42 @@ async def translate_bubble(
                 detail="Empty file received."
             )
         
-        # Translate using Gemini Vision with failover
-        result = await translate_image(image_bytes, target_lang.value)
-        
-        original_text = result.get("original", "")
-        translated_text = result.get("translated", "")
+        # Extract OCR text first, then translate text only to reduce LLM costs.
+        ocr_result = await extract_text_from_image(image_bytes)
+        original_text = ocr_result.get("text", "") if isinstance(ocr_result, dict) else ""
         
         # Smart filtering: detect noise (punctuation-only, empty, etc.)
         should_render = not NOISE_PATTERN.match(original_text)
+
+        if not should_render:
+            logger.info(f"Noise filtered out: '{original_text}'")
+            return TranslationResponse(
+                original=original_text,
+                translated="",
+                should_render=False,
+                clean_image=None,
+            )
         
         # Inpainting: remove text from bubble image (only if worth rendering)
         clean_image_b64: str | None = None
-        if should_render:
-            try:
-                # Run CPU-bound OpenCV in thread pool to keep async loop free
-                clean_bytes = await asyncio.to_thread(remove_text, image_bytes)
-                if clean_bytes:
-                    clean_image_b64 = base64.b64encode(clean_bytes).decode("ascii")
-                    logger.info("Inpainting successful")
-                else:
-                    logger.warning("Inpainting returned None, frontend will use fallback")
-            except Exception as inpaint_err:
-                logger.error(f"Inpainting error: {inpaint_err}")
-        else:
-            logger.info(f"Noise filtered out: '{original_text}'")
+        try:
+            # Run CPU-bound OpenCV in thread pool to keep async loop free
+            clean_bytes = await asyncio.to_thread(remove_text, image_bytes)
+            if clean_bytes:
+                clean_image_b64 = base64.b64encode(clean_bytes).decode("ascii")
+                logger.info("Inpainting successful")
+            else:
+                logger.warning("Inpainting returned None, frontend will use fallback")
+        except Exception as inpaint_err:
+            logger.error(f"Inpainting error: {inpaint_err}")
+
+        # Translate plain OCR text instead of image payload.
+        translation_result = await translate_text(original_text, target_lang.value)
+        translated_text = ""
+        if isinstance(translation_result, dict):
+            translated = translation_result.get("translated", "")
+            if isinstance(translated, str):
+                translated_text = translated
         
         # Deduct credit and log usage after successful translation
         # Pass resource_id for idempotency (empty string -> None)
