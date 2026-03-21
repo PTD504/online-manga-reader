@@ -14,15 +14,23 @@ const getScaledBox = (bubble: Bubble, scaleX: number, scaleY: number) => {
   if (Array.isArray(bubble.box)) {
     // Backend returns [x1, y1, x2, y2] (absolute coordinates)
     const [x1, y1, x2, y2] = bubble.box;
-    const width = x2 - x1;
-    const height = y2 - y1;
-    return { left: x1 * scaleX, top: y1 * scaleY, width: width * scaleX, height: height * scaleY };
+    return { 
+      left: Math.round(x1 * scaleX), 
+      top: Math.round(y1 * scaleY), 
+      width: Math.round((x2 - x1) * scaleX), 
+      height: Math.round((y2 - y1) * scaleY) 
+    };
   }
 
   const { x1, y1 } = bubble.box;
   const width = (bubble.box.width ?? 0) || ((bubble.box.x2 ?? x1) - x1);
   const height = (bubble.box.height ?? 0) || ((bubble.box.y2 ?? y1) - y1);
-  return { left: x1 * scaleX, top: y1 * scaleY, width: width * scaleX, height: height * scaleY };
+  return { 
+    left: Math.round(x1 * scaleX), 
+    top: Math.round(y1 * scaleY), 
+    width: Math.round(width * scaleX), 
+    height: Math.round(height * scaleY) 
+  };
 };
 
 export const drawOverlays = async (
@@ -39,6 +47,9 @@ export const drawOverlays = async (
 
   // Phase 1 (async): preload clean images before the draw pass.
   await preloadImages(bubbles, imageCache);
+
+  ctx.imageSmoothingEnabled = false;
+  ctx.textBaseline = "top";
 
   // Phase 2 (sync/atomic): clear then draw every bubble without awaits.
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -84,7 +95,10 @@ export const drawOverlays = async (
       ctx.fillRect(left, top, width, height);
     }
 
-    drawWrappedText(ctx, bubble.translatedText?.trim() || "Translated text", { left, top, width, height }, scaledPolygon);
+    const textToDraw = bubble.translatedText?.trim();
+    if (textToDraw) {
+      drawWrappedText(ctx, textToDraw, { left, top, width, height }, scaledPolygon);
+    }
     ctx.restore();
   }
 };
