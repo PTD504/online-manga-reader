@@ -6,6 +6,11 @@
 ![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-1.23-005CED?logo=onnx&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 ![Cloud Run](https://img.shields.io/badge/Google_Cloud_Run-Deployed-4285F4?logo=googlecloud&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-Bundler-646CFF?logo=vite&logoColor=white)
+![YOLO](https://img.shields.io/badge/YOLO-Detection-00FFFF?logo=yolo&logoColor=black)
+![RapidOCR](https://img.shields.io/badge/RapidOCR-ONNX_Runtime-FF4500?logo=onnx&logoColor=white)
+![Gemini LLM](https://img.shields.io/badge/Gemini_LLM-Translation-FF69B4?logo=googletranslate&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white)
 
 AI-powered manga and comic translation platform with two product surfaces:
 1. A Next.js Web App for page-level translation and visual rendering.
@@ -59,8 +64,6 @@ This repository implements an end-to-end AI translation pipeline for manga and c
 1. Detect: YOLOv11n locates candidate speech bubbles and returns boxes plus bubble polygons.
 2. Pre-process and OCR: OpenCV pre-processing (grayscale and image conditioning) prepares bubble crops, then RapidOCR extracts text concurrently per bubble.
 3. Polygon Extraction: OpenCV's classical algorithms are utilized to extract precise polygonal contours of speech bubbles from the bounding boxes provided by YOLO. This approach is computationally efficient compared to building a separate segmentation model, leveraging adaptive thresholding, connected components analysis, and contour approximation to achieve accurate polygon extraction.
-4. Translate: OCR text is grouped into a single batched LLM request (Gemini) to optimize token usage, latency, and throughput.
-5. Render: Inpainting removes original text regions, then HTML5 Canvas renders translated text with polygon-aware layout and auto-scaling behavior.
 
 ## 4. System Optimizations
 
@@ -96,6 +99,7 @@ The detection model is trained on manga/comic speech bubble data, with iterative
 - Training base: YOLO11n architecture with iterative tuning.
 - Hyperparameter optimization: Random search was employed to identify the best hyperparameters for training the YOLO model, leveraging the Ultralytics library for efficient experimentation.
 - Dataset configuration is under models/data/data.yaml.
+- The training dataset consists of 792 images, the validation dataset contains 145 images, and the test dataset includes 61 images.
 - Exported production model is consumed as backend/models/best.onnx.
 
 ### Evaluation
@@ -108,6 +112,22 @@ The detection model is trained on manga/comic speech bubble data, with iterative
 
 ![Validation Predictions](./assets/val_pred.jpg)
 - The validation predictions image highlights the model's ability to accurately detect and classify speech bubbles and manga text. The bounding boxes and confidence scores suggest that the model performs well in identifying and localizing the target objects.
+
+![Confusion Matrix](./assets/confusion_matrix_on_test_data.png)
+- The confusion matrix above illustrates the performance of the model on the test dataset, which consists of 61 images. The model demonstrates strong performance in detecting bounding boxes for speech bubbles, as evidenced by the high number of correctly classified "bubbles". However, there is room for improvement in detecting floating text, as quite many instances were missed.
+
+#### Test Dataset Inference Details:
+- **Number of test images**: 61
+- **Confidence score threshold**: 0.3
+- **IoU threshold**: 0.5
+
+#### Test Metrics:
+| Metric               | Value     |
+|----------------------|-----------|
+| Precision (P)        | 0.7866    |
+| Recall (R)           | 0.6682    |
+| mAP50                | 0.7350    |
+| mAP50-95             | 0.6019    |
 
 ## 6. Installation and Local Setup
 
@@ -195,7 +215,20 @@ Create web-app/.env.local:
 NEXT_PUBLIC_API_URL=http://localhost:8080
 ```
 
-## 7. Deployment and CI/CD
+## 7. Visual Results
+
+To demonstrate the effectiveness of the system, the following images showcase the results of the YOLO model's bounding box detection (red) and the subsequent polygon extraction using OpenCV (green):
+
+![Bounding Box and Polygon Extraction 1](./assets/polygon_1.jpg)
+- The red bounding boxes represent the YOLO-detected speech bubbles, while the green polygons show the refined contours extracted using OpenCV. The polygons closely follow the shapes of the speech bubbles, demonstrating the effectiveness of the classical CV approach.
+
+![Bounding Box and Polygon Extraction 2](./assets/polygon_2.jpg)
+- This image highlights the ability of the system to handle various speech bubble shapes, including irregular and overlapping ones, with high accuracy.
+
+![Bounding Box and Polygon Extraction 3](./assets/polygon_3.jpg)
+- The combination of YOLO's bounding boxes and OpenCV's polygon extraction ensures precise localization of speech bubbles, even in complex layouts with diverse bubble shapes.
+
+## 8. Deployment and CI/CD
 
 ### Production Topology
 
@@ -222,7 +255,7 @@ GitHub Actions workflow builds and deploys backend services on pushes to main af
 Referenced workflow:
 - [deploy.yaml](.github/workflows/deploy-backend.yaml)
 
-## 8. Future Roadmap
+## 9. Future Roadmap
 
 - Expand support for color comics and Webtoon-like non-white/gradient backgrounds.
 - Improve handling of vertical text languages and native manga typography conventions.
