@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Manga Reader Web App
 
-## Getting Started
+Next.js web application for page-level manga translation with visual rendering and overlay management.
 
-First, run the development server:
+## Features
+
+- **Page Upload & Processing**: Upload manga page images for detection, OCR, and translation
+- **Real-time Canvas Rendering**: Polygon-aware text overlay system that preserves original artwork
+- **Translation Review**: Visual interface for reviewing and adjusting translations before rendering
+- **Responsive Design**: Mobile-friendly UI for all screen sizes
+- **State Management**: Efficient request batching and caching to reduce API overhead
+
+## Development
+
+### Prerequisites
+
+- Node.js 20+
+- npm
+
+### Setup
+
+```bash
+cd web-app
+npm install
+```
+
+### Development Mode
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Opens the development server at [http://localhost:3000](http://localhost:3000) with hot-reload support.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Build for Production
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+```
 
-## Learn More
+Generates optimized build output for deployment.
 
-To learn more about Next.js, take a look at the following resources:
+## Project Structure
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+web-app/
+├── package.json            # Dependencies and scripts
+├── next.config.ts          # Next.js configuration
+├── tsconfig.json           # TypeScript configuration
+├── postcss.config.mjs       # PostCSS configuration
+├── eslint.config.mjs        # ESLint configuration
+├── app/
+│   ├── page.tsx            # Main application page component
+│   ├── layout.tsx          # Root layout wrapper
+│   ├── globals.css         # Global styles
+│   ├── components/         # Reusable React components
+│   ├── overlayRenderer.ts  # Canvas rendering pipeline for overlays
+│   ├── overlayImageUtils.ts # Image preprocessing and cropping utilities
+│   ├── overlayPolygonUtils.ts # Polygon coordinate transformation utilities
+│   └── overlayTextLayout.ts # Text layout and positioning logic for overlays
+├── hooks/
+│   └── useTranslation.ts   # Custom hook for translation workflow management
+├── lib/
+│   └── api/                # API client utilities for backend communication
+├── public/                 # Static assets
+├── tests/                  # Test files
+└── Dockerfile              # Container configuration for production deployment
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Canvas Overlay System
 
-## Deploy on Vercel
+The web app uses HTML5 Canvas for efficient, polygon-aware text overlay rendering:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Polygon-based Layout**: Text is positioned within speech bubble polygons for seamless visual integration
+- **Character Wrapping**: Automatic text wrapping respects polygon boundaries
+- **Font Rendering**: Custom fonts and styling preserve manga aesthetic
+- **Performance**: Canvas caching minimizes redraws and optimizes memory usage
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Configuration
+
+Environment variables are managed via `.env.local`:
+
+- **NEXT_PUBLIC_API_URL**: Backend API base URL (default: `http://localhost:8080`)
+
+## Deployment
+
+The web app is deployed to Vercel with automatic CI/CD on git pushes to the main branch.

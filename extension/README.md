@@ -1,25 +1,26 @@
-# Manga Translator Chrome Extension
+# Manga Translator Browser Extension
 
-Chrome Extension (Manifest V3) for automatically detecting and translating manga speech bubbles.
+Browser Extension (Manifest V3) for in-context detection and translation of manga speech bubbles directly on reading websites.
 
 ## Features
 
-- 🔍 **Automatic Detection**: Uses IntersectionObserver for lazy-loading image detection
-- 🌐 **Multi-language Support**: Translate to 10+ languages
-- 🎨 **Comic-style Overlays**: Beautiful translation bubbles that match manga aesthetics
-- ⚡ **Performance Optimized**: Canvas-based cropping and state management to prevent re-processing
+- **In-context Translation**: Detect and translate speech bubbles directly on manga reading websites
+- **Manifest V3 Architecture**: Separate content scripts, background service worker, and popup UI
+- **Real-time Detection**: Uses YOLOv11n model via backend API for accurate speech bubble localization
+- **Overlay Rendering**: Canvas-based polygon-aware text overlay system for seamless visual integration
+- **State Management**: Efficient caching and batching to minimize API calls and reduce processing overhead
 
 ## Development
 
 ### Prerequisites
 
-- Node.js 18+
-- npm or yarn
+- Node.js 20+
+- npm
 
 ### Setup
 
 ```bash
-cd frontend
+cd extension
 npm install
 ```
 
@@ -29,7 +30,7 @@ npm install
 npm run dev
 ```
 
-This starts the Vite dev server with HMR support for the popup.
+Starts the Vite dev server with HMR support for the extension UI components.
 
 ### Build for Production
 
@@ -37,46 +38,51 @@ This starts the Vite dev server with HMR support for the popup.
 npm run build
 ```
 
-The built extension will be in the `dist/` folder.
+Generates optimized build output in the `dist/` folder.
 
 ### Load in Chrome
 
 1. Open `chrome://extensions/`
-2. Enable "Developer mode"
+2. Enable "Developer mode" (top right toggle)
 3. Click "Load unpacked"
 4. Select the `dist/` folder
 
 ## Project Structure
 
 ```
-frontend/
-├── manifest.json           # Chrome Extension Manifest V3
-├── vite.config.ts          # Vite build config
+extension/
+├── manifest.json           # Chrome Extension Manifest V3 configuration
+├── vite.config.ts          # Vite build configuration
+├── tsconfig.json           # TypeScript configuration
+├── package.json            # Dependencies and build scripts
 ├── src/
-│   ├── popup/              # React settings UI
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── styles.css
+│   ├── vite-env.d.ts       # Vite type definitions
+│   ├── background/         # Service worker (Manifest V3)
+│   │   ├── main.ts         # Lifecycle and message routing
+│   │   └── proxy.ts        # API proxy and request handling
 │   ├── content/            # Content script (injected into pages)
-│   │   ├── index.ts        # IntersectionObserver + OverlayManager
-│   │   └── styles.css      # Bubble styling
-│   └── background/         # Service worker
-│       └── index.ts
+│   │   ├── main.ts         # Entry point
+│   │   ├── network.ts      # Network communication with backend
+│   │   ├── overlay.ts      # Overlay rendering logic
+│   │   ├── processor.ts    # Image processing and polygon handling
+│   │   ├── widget.tsx      # React widget component
+│   │   ├── types.ts        # Type definitions
+│   │   └── styles.css      # Content script styling
+│   ├── popup/              # Extension popup UI (React)
+│   ├── options/            # Extension options page
+│   ├── dashboard/          # Dashboard interface (React)
+│   │   ├── App.tsx
+│   │   └── index.html
+│   └── lib/                # Shared utilities and helpers
 └── fonts/                  # Web accessible fonts
     └── Bangers-Regular.ttf
 ```
 
-## API Endpoints
-
-The extension communicates with the backend at `http://localhost:8000`:
-
-- `POST /detect` - Detect speech bubbles (returns bounding boxes)
-- `POST /translate-bubble` - Translate a cropped bubble image
-
 ## Configuration
 
-Settings are stored in Chrome sync storage:
+Settings are managed via Chrome Storage API:
 
-- **enabled**: Toggle extension on/off
-- **targetLang**: Target translation language
-- **backendUrl**: Backend API URL
+- **extension.enabled**: Toggle extension on/off
+- **extension.targetLanguage**: Target translation language
+- **extension.backendUrl**: Backend API base URL
+- **extension.confidence**: Detection confidence threshold
