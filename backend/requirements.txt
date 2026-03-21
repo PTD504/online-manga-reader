@@ -3,6 +3,7 @@ fastapi==0.128.0
 uvicorn==0.40.0
 python-multipart==0.0.21
 watchfiles==1.1.1
+slowapi==0.1.9
 
 # AI / ML
 google-genai==1.59.0

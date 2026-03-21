@@ -6,8 +6,9 @@ This module defines the REST API endpoints for YOLOv11 bubble detection.
 
 import logging
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
+from app.core.limiter import limiter
 from app.schemas.detection import Detection, DetectionResponse
 from app.services.detector import detect_bubbles
 
@@ -18,7 +19,9 @@ router = APIRouter(tags=["Detection"])
 
 
 @router.post("/detect", response_model=DetectionResponse)
+@limiter.limit("30/minute")
 async def detect_bubbles_endpoint(
+    request: Request,
     file: UploadFile = File(...)
 ) -> DetectionResponse:
     """

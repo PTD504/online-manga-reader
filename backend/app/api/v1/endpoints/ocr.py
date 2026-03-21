@@ -2,8 +2,9 @@
 
 import logging
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
+from app.core.limiter import limiter
 from app.schemas.ocr import OCRResponse
 from app.services.ocr import extract_text_from_image
 
@@ -13,7 +14,8 @@ router = APIRouter(tags=["OCR"])
 
 
 @router.post("/extract", response_model=OCRResponse)
-async def extract_text_endpoint(file: UploadFile = File(...)) -> OCRResponse:
+@limiter.limit("30/minute")
+async def extract_text_endpoint(request: Request, file: UploadFile = File(...)) -> OCRResponse:
     """Extract text from an uploaded manga image using RapidOCR."""
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(

@@ -12,9 +12,12 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.extension import _rate_limit_exceeded_handler
 
 from app.api.v1.api_router import api_router
 from app.core.constants import API_V1_PREFIX
+from app.core.limiter import limiter
 from app.services.translator import get_translator
 from app.services.detector import get_detector
 
@@ -72,6 +75,9 @@ app = FastAPI(
     version="2.1.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configure CORS for browser extension access
 app.add_middleware(

@@ -11,9 +11,10 @@ import logging
 import re
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 
 from app.api.deps import get_current_user
+from app.core.limiter import limiter
 from app.schemas.translation import TargetLanguage, TranslationResponse
 from app.services.credits import check_credits, deduct_credit, log_usage
 from app.services.inpainter import remove_text
@@ -32,7 +33,9 @@ NOISE_PATTERN = re.compile(r'^[\W_]*$')
 
 
 @router.post("/translate-bubble", response_model=TranslationResponse)
+@limiter.limit("20/minute")
 async def translate_bubble(
+    request: Request,
     file: UploadFile = File(...),
     target_lang: TargetLanguage = Query(
         default=TargetLanguage.VIETNAMESE,
@@ -148,7 +151,9 @@ async def translate_bubble(
 
 
 @router.post("/translate-page")
+@limiter.limit("10/minute")
 async def translate_page_endpoint(
+    request: Request,
     file: UploadFile = File(...),
     target_lang: str = "Vietnamese"
 ) -> List[Dict[str, Any]]:
