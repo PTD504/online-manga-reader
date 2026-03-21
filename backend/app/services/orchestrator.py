@@ -7,6 +7,7 @@ Contains non-HTTP pipeline logic to keep API routers thin and focused.
 import asyncio
 import base64
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 import cv2
@@ -18,6 +19,9 @@ from app.services.ocr import extract_text_from_image
 from app.services.translator import translate_batch
 
 logger = logging.getLogger(__name__)
+
+
+NOISE_PATTERN = re.compile(r'^[\W_]+$')
 
 
 def _clamp_box(box: List[int], width: int, height: int) -> Optional[List[int]]:
@@ -74,6 +78,7 @@ async def process_full_page(image_bytes: bytes, target_lang: str) -> List[Dict[s
         enriched["clean_image"] = None
         enriched["translatedText"] = ""
         enriched["ocr_text"] = ""
+        enriched["ocr_confidence"] = 0.0
 
         box = bubble.get("box")
         if not isinstance(box, list):
@@ -106,6 +111,12 @@ async def process_full_page(image_bytes: bytes, target_lang: str) -> List[Dict[s
             if isinstance(text_value, str):
                 enriched["ocr_text"] = text_value.strip()
 
+            confidence_value = ocr_result.get("confidence", 0.0)
+            try:
+                enriched["ocr_confidence"] = float(confidence_value)
+            except (TypeError, ValueError):
+                enriched["ocr_confidence"] = 0.0
+
         if clean_bytes:
             enriched["clean_image"] = base64.b64encode(clean_bytes).decode("ascii")
 
@@ -118,20 +129,45 @@ async def process_full_page(image_bytes: bytes, target_lang: str) -> List[Dict[s
     for bubble in enriched_bubbles:
         ocr_text = bubble.get("ocr_text", "")
         index = bubble.get("index")
-        if isinstance(index, int) and isinstance(ocr_text, str) and ocr_text.strip():
-            batch_payload[str(index)] = ocr_text.strip()
+        confidence = bubble.get("ocr_confidence", 0.0)
+
+        if not isinstance(index, int) or not isinstance(ocr_text, str):
+            continue
+
+        normalized_text = ocr_text.strip()
+        try:
+            confidence_value = float(confidence)
+        except (TypeError, ValueError):
+            confidence_value = 0.0
+
+        # Skip likely YOLO false positives and empty OCR outputs to save LLM tokens.
+        if not normalized_text or confidence_value < 0.45:
+            bubble["_skip"] = True
+            continue
+
+        # Keep punctuation/sound-effect text as-is to avoid unnecessary translation.
+        if NOISE_PATTERN.match(normalized_text):
+            bubble["_skip"] = True
+            continue
+
+        batch_payload[str(index)] = normalized_text
 
     translated_map: dict[str, str] = {}
     if batch_payload:
         translated_map = await translate_batch(batch_payload, target_lang)
 
+    final_bubbles = []
     for bubble in enriched_bubbles:
+        if bubble.pop("_skip", False):
+            continue
         index = bubble.get("index")
         key = str(index) if isinstance(index, int) else ""
-        translated = translated_map.get(key, "")
-        bubble["translatedText"] = translated if isinstance(translated, str) else ""
+        if key in translated_map:
+            bubble["translatedText"] = translated_map.get(key, "")
         bubble.pop("ocr_text", None)
+        bubble.pop("ocr_confidence", None)
         bubble.pop("index", None)
+        final_bubbles.append(bubble)
 
-    logger.info(f"Translate-page complete: {len(enriched_bubbles)} bubbles processed")
-    return enriched_bubbles
+    logger.info(f"Translate-page complete: {len(final_bubbles)} bubbles processed")
+    return final_bubbles

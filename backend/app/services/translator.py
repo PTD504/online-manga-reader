@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Model configuration with failover
-PRIMARY_MODEL = "gemini-2.5-flash-lite"
-FALLBACK_MODEL = "gemini-2.0-flash"
+PRIMARY_MODEL = "gemini-2.5-flash"
+FALLBACK_MODEL = "gemini-3-flash-preview"
 
 
 class TranslatorService:
