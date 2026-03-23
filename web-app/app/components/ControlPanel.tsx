@@ -134,6 +134,21 @@ export default function ControlPanel({
             </span>
           ) : null}
         </button>
+
+        <div className="rounded-lg border border-amber-100 bg-amber-50/50 p-4">
+          <h3 className="text-xs font-bold text-amber-900">Heads Up! A few notes on this MVP:</h3>
+          <ul className="mt-2 list-outside list-disc space-y-2 px-3 text-[11px] leading-relaxed text-amber-800">
+            <li>
+              <span className="font-semibold text-amber-900 text-xs">Cold Starts:</span> Serverless architecture means the backend sleeps when idle. The very first request might take an extra 10-15 seconds to wake up. Patience is a virtue!
+            </li>
+            <li>
+              <span className="font-semibold text-amber-900 text-xs">Text Orientation:</span> Currently optimized for horizontal text. Native vertical Japanese manga layouts are on the roadmap.
+            </li>
+            <li>
+              <span className="font-semibold text-amber-900 text-xs">Visual Constraints:</span> The OCR and classical CV contour extraction work best with standard black-on-white speech bubbles. Complex webtoon backgrounds might cause unpredictable rendering.
+            </li>
+          </ul>
+        </div>
       </div>
     </aside>
   );
